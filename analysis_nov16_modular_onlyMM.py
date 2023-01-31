@@ -115,27 +115,16 @@ for fname in forest_daily:#[forest_daily[x] for x in [70,76]]:
 
     #     site_result[site_id] = "Invalid A(g) relation"
     #     continue
-    #%%
-    dfgpp = fit_gpp(df_to_fit,1)
-    dfi = fit_tau(dfgpp)
+    #%%   
     
+    dfgpp = fit_gpp_mm(df_to_fit,0)
     
-    dfgpp_mm = fit_gpp_mm(df_to_fit,0)
-    
-    if dfgpp_mm["gppR2"].iloc[0] - dfgpp_mm["gppR2_null"].iloc[0] < 0.1:
+    if dfgpp["gppR2"].iloc[0] - dfgpp["gppR2_null"].iloc[0] < 0.1:
         print("No A(g) relationship")
         site_result[site_id] = "No A(g) relationship"
         continue
     
-    dfi_mm = fit_tau_mm(dfgpp_mm)
-
-    dfi["tau_mm"] = dfi_mm.tau
-    dfi["smin_mm"] = dfi_mm.smin
-    dfi["gppmax_mm"] = dfi_mm.gppmax
-
-    dfi["et_mm"] = dfi_mm.et_tau
-    dfi["etr2_mm"] = dfi_mm.etr2_smc
-    dfi["gppR2_mm"] = dfi_mm.gppR2
+    dfi = fit_tau_mm(dfgpp)
 
     # g_n = dfgpp_mm.cond/dfgpp_mm.kgpp
     # gn2 = g_n - np.log(g_n+1)
@@ -253,7 +242,7 @@ df_meta["ddrain_max"] = [np.max(ddl_rain[x]) for i,x in enumerate(df_meta.SITE_I
 df_meta["ddrain_90"] = [np.quantile(ddl_rain[x],0.90) for i,x in enumerate(df_meta.SITE_ID)]
 
 #%%
-rainmod = smf.ols("tau_mm ~ ddrain_mean",data=df_meta).fit()
+rainmod = smf.ols("tau ~ ddrain_mean",data=df_meta).fit()
 
 #%%
 fig,ax = plt.subplots(1,1,figsize=(10,8))
@@ -268,7 +257,7 @@ leg1 = ax.legend(loc="upper left")
 points_handles = []
 for i in range(len(biome_list)):
     subI = df_meta.loc[df_meta.combined_biome==biome_list[i]]
-    pointI, = ax.plot(subI.ddrain_mean,subI.tau_mm,'o',alpha=0.75,markersize=15,color=mpl.colormaps["tab10"](i+2),label=biome_list[i])
+    pointI, = ax.plot(subI.ddrain_mean,subI.tau,'o',alpha=0.75,markersize=15,color=mpl.colormaps["tab10"](i+2),label=biome_list[i])
     points_handles.append(pointI)
 
 plt.xlim(0,150)
@@ -310,11 +299,11 @@ water_limitation = pd.DataFrame({"SITE_ID":site_result.keys(),
 #0.34594491273839545, 0.5240987351788127 #no year effect, only tune gppmax
 #%%
 all_results["gpp_par_coef"] = all_results.gppmax/np.sqrt(all_results.par)
-all_results["gpp_par_coef_mm"] = all_results.gppmax_mm/np.sqrt(all_results.par)
+#all_results["gpp_par_coef_mm"] = all_results.gppmax_mm/np.sqrt(all_results.par)
 year_results = all_results.groupby(["SITE_ID","year"]).mean(numeric_only=True).reset_index()
 site_means = year_results.groupby("SITE_ID").mean(numeric_only=True).reset_index()
 site_means["site_gpp_par"] = 1*site_means["gpp_par_coef"]
-site_means["site_gpp_par_mm"] = 1*site_means["gpp_par_coef_mm"]
+#site_means["site_gpp_par_mm"] = 1*site_means["gpp_par_coef_mm"]
 
 year_results = pd.merge(year_results,site_means[["SITE_ID","site_gpp_par","site_gpp_par_mm"]] , how="left",on="SITE_ID")
 
@@ -326,7 +315,7 @@ fig,ax = plt.subplots(1,1,figsize=(10,8))
 points_handles = []
 for i in range(len(biome_list)):
     subI = year_results.loc[year_results.combined_biome==biome_list[i]]
-    pointI, = ax.plot(subI.site_gpp_par,subI.gpp_par_coef_mm,'o',alpha=0.5,markersize=15,color=mpl.colormaps["tab10"](i+2),label=biome_list[i])
+    pointI, = ax.plot(subI.site_gpp_par,subI.gpp_par_coef,'o',alpha=0.5,markersize=15,color=mpl.colormaps["tab10"](i+2),label=biome_list[i])
     points_handles.append(pointI)
 #plt.ylim(0,1)
 #plt.xlim(0,1)
@@ -342,7 +331,7 @@ fig,ax = plt.subplots(1,1,figsize=(10,8))
 points_handles = []
 for i in range(len(biome_list)):
     subI = year_results.loc[year_results.combined_biome==biome_list[i]]
-    pointI, = ax.plot(subI.site_gpp_par_mm,subI.LAImax,'o',alpha=0.5,markersize=15,color=mpl.colormaps["tab10"](i+2),label=biome_list[i])
+    pointI, = ax.plot(subI.site_gpp_par,subI.LAImax,'o',alpha=0.5,markersize=15,color=mpl.colormaps["tab10"](i+2),label=biome_list[i])
     points_handles.append(pointI)
 plt.ylim(0,6.5)
 plt.xlim(0,1)

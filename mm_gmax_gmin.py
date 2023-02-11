@@ -12,113 +12,19 @@ import pandas as pd
 import scipy.optimize
 import statsmodels.formula.api as smf
 import statsmodels.api as sm
-import scipy.special
 
-
+#%%
 zsoil_mm_base = 1000
 zsoil_mol = zsoil_mm_base*1000/18 #now depth in cm from BIF
 gammaV = 0.07149361181458612
 width= np.inf
-gmax = np.inf
-
-def fit_gpp_mm(df0,year_effect):
-    df_to_fit = df0.copy()
-    g_samp = np.array(df_to_fit.cond)
-    gpp_samp = np.array(df_to_fit.gpp_qc)
-    par_samp = np.array(df_to_fit.par)
-
-    obs_gppmax = np.max(gpp_samp)
-    
-    doy_samp = np.array(df_to_fit.doy)
-    
-    #%%
-    if year_effect:
-    
-        df_hi_cond = []
-        for yearJ in pd.unique(df_to_fit.year):
-            dataJ = df_to_fit.loc[df_to_fit.year == yearJ]
-            year_cutoff = np.quantile(dataJ.cond,0.67)
-            year_high = dataJ.loc[dataJ.cond > year_cutoff]
-            df_hi_cond.append(year_high)
-        df_hi_cond = pd.concat(df_hi_cond).reset_index()
-#        hi_mod = smf.ols("np.log(gpp_qc) ~ np.log(par) + C(year)",data=df_hi_cond,missing="drop").fit()
-        hi_mod = smf.ols("gpp_qc ~ 0 + np.sqrt(par):C(year)",data=df_hi_cond,missing="drop").fit()
-
-    else:
-        df_hi_cond = df_to_fit.loc[df_to_fit.cond > np.quantile(df_to_fit.cond,0.67)]
-        #hi_mod = smf.ols("np.log(gpp_qc) ~ np.log(par)",data=df_hi_cond,missing="drop").fit()
-        hi_mod = smf.ols("gpp_qc ~ 0+np.sqrt(par)",data=df_hi_cond,missing="drop").fit()
-
-    #%%
-#    gppmax = np.exp(hi_mod.predict(df_to_fit))
-    gppmax0 = hi_mod.predict(df_to_fit)
-    par_exp = hi_mod.params[-1]
-    df_to_fit["par_exp"] = par_exp
-
-    #%%
-    if year_effect:
-        yearmat = np.array(pd.get_dummies(df_to_fit.year))
-        mmfrac = 1/200
-        def gpp_opt(pars):
-            #b_par, b_airt, b_airt2 = coefs[:3]
-            gppmax = yearmat.dot(pars[:])*gppmax0
-            gpp_pred = gppmax*g_samp/(g_samp + mmfrac*gppmax)
-            return (gpp_pred-gpp_samp)[np.isfinite(gpp_samp)]
-        
-        fit0 = np.ones(yearmat.shape[1])
-        gpp_optres = scipy.optimize.least_squares(gpp_opt,x0=fit0,method="lm")#,x_scale=np.abs(fit0))
-        
-        df_to_fit["gppmax"] = yearmat.dot(gpp_optres.x[:])*gppmax0
-    
-        kg = df_to_fit["gppmax"]*mmfrac
-        df_to_fit["kgpp"] =kg
-        df_to_fit["gpp_slope"] = 200
-    #%%
-    else:
-        def gpp_opt(pars):
-            gppmax = pars[1]*gppmax0
-            gpp_pred = gppmax*g_samp/(g_samp + gppmax/pars[0])
-            return (gpp_pred-gpp_samp)[np.isfinite(gpp_samp)]
-        
-        fit0 = np.ones(2)
-        fit0[0] = 200
-        gpp_optres = scipy.optimize.least_squares(gpp_opt,x0=fit0,method="lm")#,x_scale=np.abs(fit0))
-        pars = gpp_optres.x
-        df_to_fit["gppmax"] = pars[1]*gppmax0
-    
-        kg = df_to_fit["gppmax"]/pars[0]
-        df_to_fit["kgpp"] =kg
-        df_to_fit["gpp_slope"] = pars[0]
-    
-        # def gpp_opt(pars):
-        #     gppmax = pars[0]*gppmax0
-        #     gpp_pred = gppmax*g_samp/(g_samp + gppmax/200)
-        #     return (gpp_pred-gpp_samp)[np.isfinite(gpp_samp)]
-        
-        # fit0 = np.ones(1)
-        # gpp_optres = scipy.optimize.least_squares(gpp_opt,x0=fit0,method="lm")#,x_scale=np.abs(fit0))
-        # pars = gpp_optres.x
-        # df_to_fit["gppmax"] = pars[0]*gppmax0
-    
-        # kg = df_to_fit["gppmax"]/200
-        # df_to_fit["kgpp"] =kg
-#df_to_fit["gpp_slope"] = 110
-    #%%
-    gpp_pred = df_to_fit["gppmax"]*g_samp/(g_samp + kg)
-    df_to_fit["gpp_pred"] = gpp_pred
-    gpp_r2 = 1-np.nanmean((gpp_pred-gpp_samp)**2)/np.nanvar(gpp_samp)
-    df_to_fit["gppR2"] = gpp_r2
-    df_to_fit["gppR2_null"] = np.corrcoef(df_to_fit["gppmax"][np.isfinite(gpp_samp)],gpp_samp[np.isfinite(gpp_samp)])[0,1]**2
-    
-   #%% 
-    return df_to_fit
+#gmax = np.inf
 #%%
-
 
 def fit_tau_mm(dfi):
 
 
-    #%%
+    
     wbal_samp = np.array(dfi["waterbal"])/1000
     vpd_samp = np.array(dfi.vpd)
     
@@ -138,7 +44,7 @@ def fit_tau_mm(dfi):
     g_adj = g_samp/np.sqrt(2*zsoil_mol*k_samp/(vpd_samp/100))
 
 # yearmat = np.array(pd.get_dummies(dfi.year))
-#%%
+ #%%
     g_n = dfi.cond/dfi.kgpp
     gn2 = g_n - np.log(g_n+1)
     lhs_gg = gn2*2*k_samp*(vpd_samp/100)/zsoil_mol
@@ -151,6 +57,7 @@ def fit_tau_mm(dfi):
  
     tau_hi = 1/(invmod_mm.params[1]-2*invmod_mm.bse[1])/(60*60*24)
     tau_lo = 1/(invmod_mm.params[1]+2*invmod_mm.bse[1])/(60*60*24)
+ 
  #%%
  
     def tofit(pars):
@@ -158,21 +65,25 @@ def fit_tau_mm(dfi):
         #slope = np.sqrt(1/(tau*(60*60*24)))
         
         smin = pars[1]
+        gmax = pars[2]
+        gmin = pars[3]
         s_adj = np.clip(wbal_samp- smin,0,width)
         inside_term = zsoil_mol*s_adj/(vpd_samp/100)/(2*k_samp*tau_s)
         
         inside_w = np.exp(-1*inside_term-1)
         final_cond = -k_samp *(1+np.real(scipy.special.lambertw(-inside_w,-1)))
         final_cond[np.isnan(final_cond)] = 0
+        final_cond = np.clip(final_cond,gmin,gmax)
         et_out = petVnum_samp*final_cond/(gammaV*(fac1 + final_cond)+sV_samp*final_cond)/44200
         return (et_out-et_samp)
         
-    fit0 = np.zeros(2)
+    fit0 = np.zeros(4)
     fit0[0] = tau_guess
     fit0[1] = smin_guess #np.array(dfi.groupby("year").min(numeric_only=1).waterbal/1000)
-    
+    fit0[2] = np.quantile(g_samp,0.95)
+    fit0[3] = np.quantile(g_samp,0.05)
     cond_optres = scipy.optimize.least_squares(tofit,x0=fit0,method="lm",x_scale=np.abs(fit0))
-    tau, smin = cond_optres.x
+    tau, smin, gmax, gmin = cond_optres.x
     tau_s = tau*(60*60*24)
     #slope = np.sqrt(1/(tau*(60*60*24)))
     
@@ -182,11 +93,13 @@ def fit_tau_mm(dfi):
     inside_w = np.exp(-1*inside_term-1)
     final_cond = -k_samp *(1+np.real(scipy.special.lambertw(-inside_w,-1)))
     final_cond[np.isnan(final_cond)] = 0
+    final_cond = np.clip(final_cond,gmin,gmax)
 
     et_out = petVnum_samp*final_cond/(gammaV*(fac1 + final_cond)+sV_samp*final_cond)/44200
  
     #%%
     dfi["tau"] = tau
+    dfi["tau_reg"] = tau_guess
     #dfi["tau_year"] = tau_guess_year
     dfi["tau_hi"] = tau_hi
     dfi["tau_lo"] = tau_lo

@@ -67,7 +67,7 @@ myFmt = mdates.DateFormatter('%b %Y')
 #filename_list = glob.glob("processed_nov7b/*.csv")
 #from functions_from_nov16 import fit_gpp, fit_tau
 
-from double_doy_effect_gmax_gmin2 import fit_tau
+from double_doy_effect_gmax_gmin2 import fit_tau, fit_tau_width
 # from fit_gpp_use_evi import fit_gpp_evi
 # from fit_gpp_airt_slope import fit_gpp_setslope
 # from simple_gpp_mod import fit_gpp_simple
@@ -97,10 +97,14 @@ site_result = {}
 #%%
 #sites_late_season = pd.read_csv("gs_50_50_daynight_data.csv")
 #sites_late_season = pd.read_csv("data_gpp_sitewise_nosub_mm2.csv")
-sites_late_season = pd.read_csv("data_gpp_sitewise_nosub2.csv")
+sites_late_season = pd.read_csv("data_gpp_weight_slope.csv")
+#sites_late_season = pd.read_csv("data_gpp_evi_parsq.csv")
 
-sites_late_season["kgpp"] = 1*sites_late_season["kgpp2"]
-sites_late_season["gpp_pred"] = 1*sites_late_season["gpp_pred2"]
+#sites_late_season["kgpp"] = 1*sites_late_season["kgpp2"]
+#sites_late_season["gpp_pred"] = 1*sites_late_season["gpp_pred2"]
+
+#sites_late_season["kgpp"] = sites_late_season["kgpp"]/sites_late_season["season_effect"]
+
 
 rain_data = pd.read_csv("rain_50_50_nosub.csv")
 #%%
@@ -117,6 +121,10 @@ for site_id in pd.unique(sites_late_season.SITE_ID)[:]:#[forest_daily[x] for x i
     #nyear_in_data = len(pd.unique(df_to_fit.year))
     #%%
     dfgpp["gppR2"] = 1- np.mean((dfgpp.gpp-dfgpp.gpp_pred)**2)/np.var(dfgpp.gpp)
+    dfgpp["gppR2_no_cond"] = np.corrcoef(dfgpp.gppmax, dfgpp.gpp)[0,1]**2
+    dfgpp["gppR2_only_cond"] = np.corrcoef(dfgpp.cond, dfgpp.gpp)[0,1]**2
+
+
     #rescond = cor_skipna(dfgpp.cond,  dfgpp.gpp_pred-dfgpp.gpp)
     #resdoy = cor_skipna(dfgpp.doy,  dfgpp.gpp_pred-dfgpp.gpp)
     
@@ -182,7 +190,7 @@ for site_id in pd.unique(sites_late_season.SITE_ID)[:]:#[forest_daily[x] for x i
     #%%
     #dfi = fit_tau_mm(dfgpp).copy()
     #%%
-#     nbs = 25
+#     nbs = 50
 #     bs_tau = np.zeros(nbs)
 #     bs_etr2_null = np.zeros(nbs)
 #     bs_etr2_smc = np.zeros(nbs)
@@ -260,17 +268,24 @@ for site_id in pd.unique(sites_late_season.SITE_ID)[:]:#[forest_daily[x] for x i
     # samp_good = samp_all[samp_all.etr2_smc > 0]
     # samp_good = samp_good[samp_good.etr2_smc > samp_good.etr2_null+0.05].reset_index()
     # #%%
-    # if len(samp_good) > 10:
-    #     dfi_good = fit_tau(samp_good.copy())
-    #     dfi["tau_goodyear"] = dfi_good.tau.iloc[0]
-    # else:
-    #     dfi["tau_goodyear"] = np.nan
+    # if len(samp_good) == 0:
+    #     continue
+    # # if len(samp_good) > 10:
+    # #     dfi_good = fit_tau(samp_good.copy())
+    # #     dfi["tau_goodyear"] = dfi_good.tau.iloc[0]
+    # # else:
+    # #     dfi["tau_goodyear"] = np.nan
         
-    # year_tau_dict[site_id] = pd.unique(samp_good.tau)
-    #%%
+    # # year_tau_dict[site_id] = pd.unique(samp_good.tau)
+    # #%%
     # samp_good2 = samp_good.copy()
     # samp_good2.waterbal = (samp_good2.waterbal/1000 - samp_good2.smin)*1000
     # dfiS2 = fit_tau(samp_good2)
+    
+    # dfi["tau_year"] = dfiS2.tau.iloc[0]
+    # dfi["etr2_smc_year"] = dfiS2.etr2_smc.iloc[0]
+    # dfi["etr2_null_year"] = dfiS2.etr2_null.iloc[0]
+
     # #dfi["quant_tau"] = np.mean(samp_good.tau)
     # #%%
     # dfiS1 = fit_tau(samp_good)
@@ -404,11 +419,12 @@ def interval_len(x,c):
     return day_diff
 #%%
 ddl_rain = {}
+rain_gs_dict = {}
 for x in df_meta.SITE_ID:
     rain_site = rain_data.loc[rain_data.SITE_ID==x].copy()
     rain_allyear = np.array(rain_site.rain_mm)
     year_list = np.array(rain_site.year)
-
+    rain_gs_dict[x] = np.mean(rain_allyear[np.isfinite(rain_allyear)])
     years_max = []
     for y in np.unique(year_list):
         #cutoff = df_meta.map_data.loc[df_meta.SITE_ID==x].iloc[0]*4
@@ -425,25 +441,39 @@ for x in df_meta.SITE_ID:
 #%%
 #df_meta["rain_pt"] = [prob_stay_dry(rain_dict[x],5, 5) for i,x in enumerate(df_meta.SITE_ID)]
 df_meta["ddrain_mean"] = [np.mean(ddl_rain[x]) for i,x in enumerate(df_meta.SITE_ID)]
-df_meta["ddrain_95"] = [np.quantile(ddl_rain[x],0.95) for i,x in enumerate(df_meta.SITE_ID)]
-df_meta["ddrain_max"] = [np.max(ddl_rain[x]) for i,x in enumerate(df_meta.SITE_ID)]
-df_meta["ddrain_90"] = [np.quantile(ddl_rain[x],0.90) for i,x in enumerate(df_meta.SITE_ID)]
+#df_meta["ddrain_95"] = [np.quantile(ddl_rain[x],0.95) for i,x in enumerate(df_meta.SITE_ID)]
+#df_meta["ddrain_max"] = [np.max(ddl_rain[x]) for i,x in enumerate(df_meta.SITE_ID)]
+#df_meta["ddrain_90"] = [np.quantile(ddl_rain[x],0.90) for i,x in enumerate(df_meta.SITE_ID)]
+df_meta["gsrain_mean"] = [rain_gs_dict[x] for x in df_meta.SITE_ID]
 #%%
 #df_meta["tau_rel_unc"] = (df_meta.tau_75-df_meta.tau_25)/df_meta.tau
 #%%
 fval = ((1-df_meta.etr2_null)-(1-df_meta.etr2_smc))/(1-df_meta.etr2_smc)*(df_meta.npoints-4)
-ftest = scipy.stats.f.cdf(x=fval,dfn=1,dfd=df_meta.npoints-4)
+df_meta["ftest"] = 1-scipy.stats.f.cdf(x=fval,dfn=1,dfd=df_meta.npoints-4)
 #df_meta = df_meta.loc[ftest > 0.99]
 #df_meta = df_meta.loc[df_meta.tau_rel_unc < 0.25].copy()
 #%%
-df_meta = df_meta.loc[df_meta.gppR2 > 0].copy()
+df_meta = df_meta.loc[df_meta.gppR2 > 0.0].copy()
+df_meta = df_meta.loc[df_meta.gppR2-df_meta.gppR2_no_cond > 0.0]
+df_meta = df_meta.loc[df_meta.gppR2-df_meta.gppR2_only_cond > 0.0]
 df_meta = df_meta.loc[df_meta.smin > -10]
 #%%
-df_meta = df_meta.loc[((1-df_meta.etr2_null)-(1-df_meta.etr2_smc))/(1-df_meta.etr2_smc) > 0.15]
+df_meta = df_meta.loc[df_meta.tau > 0]
+#df_meta = df_meta.loc[df_meta.tau_lo > 0]
+#df_meta = df_meta.loc[df_meta.tau_hi > 0]
 
+#%%
+df_meta["rel_err"] = (df_meta.etr2_smc-df_meta.etr2_null)/(1-df_meta.etr2_null)
+df_meta = df_meta.loc[df_meta.rel_err > 0.1]
+#%%
+resmean = all_results.groupby("SITE_ID").mean(numeric_only=True).reset_index()
+df_meta = pd.merge(df_meta,resmean[["SITE_ID","kgpp","gpp"]],how='left',on='SITE_ID')
+#df_meta = df_meta.loc[df_meta.summer_end - df_meta.summer_start - df_meta.tau > 0]
 #%% 
 rainmod = smf.ols("tau ~ ddrain_mean",data=df_meta).fit()
 rainmodW = smf.wls("tau ~ ddrain_mean",data=df_meta,weights=df_meta.etr2_smc).fit()
+#rainmod_gpp_add = smf.ols("tau ~ ddrain_mean",data=df_meta).fit()
+#rainmod_gpp2 = smf.ols("tau ~ ddrain_mean + kgpp_y",data=df_meta).fit()
 
 #%%
 fig,ax = plt.subplots(1,1,figsize=(10,8))
@@ -488,3 +518,32 @@ amean = all_results.groupby("SITE_ID").mean(numeric_only=True).reset_index()
 df_meta = pd.merge(df_meta,amean[["SITE_ID","cond_water_limited"]],how="left",on="SITE_ID")
 #%%
 df_meta["DOM_DIST_MGMT"] = df_meta["DOM_DIST_MGMT"].fillna("None")
+#%%
+# smin = dfi.smin.iloc[0]
+# s_adj = dfi.waterbal/1000 - smin
+# slope = np.sqrt(1/(dfi.tau.iloc[0]*(60*60*24)))
+
+# #final_cond = np.clip(slope*np.sqrt(2*k_samp*zsoil_mol*s_adj/(vpd_samp/100)),gmin,gmax)
+# xarr = np.linspace(smin,np.max(dfi.waterbal/1000),500)
+
+# plt.figure()
+# plt.plot(dfi.waterbal/1000,dfi.g_adj,'o')
+# plt.plot(xarr,slope*np.sqrt(np.clip(xarr-smin,0,dfi.width.iloc[0])))
+#%%%%
+# in each patch, A(g) = L*(1-exp(-g/L*k))
+# and g ~ sqrt(L)
+# Two patches acting independently
+# A(g) = A((g1+g2)/2)/2 = (L*(1-exp(-g1/L*k)) + L*(1-exp(-g2/L*k)))/2
+# A(g) = L*
+#%%
+# g95 = []
+# a95 = []
+
+# for x in pd.unique(all_results.SITE_ID):
+#     data_site = all_results.loc[all_results.SITE_ID==x].copy()
+#     higpp = data_site.loc[data_site.gpp > np.quantile(data_site.gpp,0.95)]
+#     g95.append(np.median(higpp.cond))
+#     a95.append(np.median(higpp.gpp))
+    #%%
+plt.figure()
+plt.plot(df_meta.gpp_y,rainmod.resid,'o')

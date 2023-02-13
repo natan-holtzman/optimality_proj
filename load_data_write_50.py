@@ -159,7 +159,7 @@ def prepare_df(fname, site_id, bif_forest):
     #%%
     my_clim = df.groupby("doy").mean(numeric_only=True)
     
-    gpp_clim = np.array(2*my_clim["GPP_DT_VUT_REF"] + 0*my_clim["GPP_NT_VUT_REF"])/2
+    gpp_clim = np.array(1*my_clim["GPP_DT_VUT_REF"] + 1*my_clim["GPP_NT_VUT_REF"])/2
     
     
     gpp_clim_std = gpp_clim - np.nanmin(gpp_clim)
@@ -288,7 +288,7 @@ def prepare_df(fname, site_id, bif_forest):
     daily_cond = inv2_varTP
     daily_cond[daily_cond > 2] = np.nan
     daily_cond[daily_cond <= 0] = np.nan
-    gpp_summer = np.array(2*df["GPP_DT_VUT_REF"] + 0*df["GPP_NT_VUT_REF"])/2
+    gpp_summer = np.array(1*df["GPP_DT_VUT_REF"] + 1*df["GPP_NT_VUT_REF"])/2
     #airt_summer[airt_summer < 0] = np.nan
     gpp_summer[gpp_summer < 0] = np.nan
     
@@ -347,8 +347,8 @@ def prepare_df(fname, site_id, bif_forest):
                               #"smc":smc_summer,
                               "vpd":vpd_summer,
                               "et_unc":df.LE_RANDUNC/44200,
-                              #"sinterp":sinterp,
-#                              "gpp_unc":df.NEE_VUT_REF_RANDUNC/-df.NEE_VUT_REF,
+                              #"sinterp":sinterp
+                              "nee_unc":df.NEE_VUT_REF_RANDUNC/-df.NEE_VUT_REF,
                               "gpp_unc":(df.GPP_DT_VUT_75-df.GPP_DT_VUT_25)/df.GPP_DT_VUT_REF,
                               "summer_start":summer_start,
                               "summer_end":summer_end,
@@ -458,18 +458,18 @@ for fname in forest_daily:#[forest_daily[x] for x in [70,76]]:
     all_results.append(df_to_fit)
     #%%
 all_results = pd.concat(all_results)
-all_results.to_csv("gs_50_50_nosub.csv")
+all_results.to_csv("gs_50_50_nosub_dn.csv")
 #%%
-sites = []
-years = []
-rains = []
-for x in rain_dict.keys():
-    ri = rain_dict[x][0]
-    sites.append(np.array([x]*len(ri)))
-    years.append(rain_dict[x][1])
-    rains.append(ri)
-#%%
-raindf = pd.DataFrame({"SITE_ID":np.concatenate(sites),
-                      "year":np.concatenate(years),
-                      "rain_mm":np.concatenate(rains)})
-raindf.to_csv("rain_50_50_nosub.csv")
+# sites = []
+# years = []
+# rains = []
+# for x in rain_dict.keys():
+#     ri = rain_dict[x][0]
+#     sites.append(np.array([x]*len(ri)))
+#     years.append(rain_dict[x][1])
+#     rains.append(ri)
+# #%%
+# raindf = pd.DataFrame({"SITE_ID":np.concatenate(sites),
+#                       "year":np.concatenate(years),
+#                       "rain_mm":np.concatenate(rains)})
+# raindf.to_csv("rain_50_50_nosub.csv")

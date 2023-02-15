@@ -126,7 +126,18 @@ for site_id in pd.unique(sites_late_season.SITE_ID)[:]:#[forest_daily[x] for x i
     dfgpp = sites_late_season.loc[sites_late_season.SITE_ID==site_id].copy()
     dfgpp = dfgpp.loc[dfgpp.kgpp > 0].copy()
     #%%
+    dfyear = dfgpp.groupby("year").mean(numeric_only=True).reset_index()
+    dfgpp = pd.merge(dfgpp,dfyear[["year","smc","waterbal"]],on="year",how="left")
+    #%%
+    sint_raw = np.interp(dfgpp.smc_x,np.sort(dfgpp.smc_x),np.sort(dfgpp.waterbal_x))
     
+    s_anom = dfgpp.smc_x-dfgpp.smc_y
+    w_anom = dfgpp.waterbal_x-dfgpp.waterbal_y
+    
+    sint_anom = np.interp(s_anom,
+                          np.sort(s_anom),
+                          np.sort(w_anom)) + dfgpp.smc_y * np.std(w_anom)/np.std(s_anom)
+    #np.std(dfgpp.waterbal_y)/np.std(dfgpp.smc_y)
     #if np.max(dfgpp.gpp_frac) < 0.8 or np.min(dfgpp.gpp_frac) > 0.5:
     #    continue
     #nyear_in_data = len(pd.unique(df_to_fit.year))
@@ -151,11 +162,11 @@ for site_id in pd.unique(sites_late_season.SITE_ID)[:]:#[forest_daily[x] for x i
     #%%
     
     try:
-        cor_wb = cor_skipna(dfgpp.waterbal,dfgpp.cond)
+        cor_wb = cor_skipna(dfgpp.waterbal_x,dfgpp.cond)
         cor_si = cor_skipna(dfgpp.sinterp,dfgpp.cond)
         
         #if cor_si[0] > cor_wb[0]:
-        dfgpp["waterbal"] = 1*dfgpp.sinterp#_gs
+        dfgpp["waterbal"] = 1*sint_anom - np.max(sint_anom)#   dfgpp.sinterp#_gs
     
     except:
         continue
@@ -478,7 +489,7 @@ df_meta = df_meta.loc[df_meta.tau > 0]
 
 #%%
 df_meta["rel_err"] = (df_meta.etr2_smc-df_meta.etr2_null)/(1-df_meta.etr2_null)
-df_meta = df_meta.loc[df_meta.rel_err > 0.1]
+df_meta = df_meta.loc[df_meta.rel_err > 0.05]
 #%%
 resmean = all_results.groupby("SITE_ID").mean(numeric_only=True).reset_index()
 df_meta = pd.merge(df_meta,resmean[["SITE_ID","kgpp","gpp"]],how='left',on='SITE_ID')
@@ -486,8 +497,13 @@ df_meta = pd.merge(df_meta,resmean[["SITE_ID","kgpp","gpp"]],how='left',on='SITE
 #%%
 aunique = all_results.groupby("SITE_ID").nunique().reset_index().rename(columns={"year":"nyear"})
 df_meta = pd.merge(df_meta,aunique[["SITE_ID","nyear"]],how="left",on="SITE_ID")
-df_meta = df_meta.loc[df_meta.nyear >= 3]
+#df_meta = df_meta.loc[df_meta.nyear >= 3]
 #%% 
+amin = all_results.groupby("SITE_ID").min(numeric_only=True).reset_index().rename(columns={"waterbal":"wbal_min"})
+df_meta = pd.merge(df_meta,amin[["SITE_ID","wbal_min"]],how="left",on="SITE_ID")
+
+
+#%%
 rainmod = smf.ols("tau ~ ddrain_mean",data=df_meta).fit()
 rainmodW = smf.wls("tau ~ ddrain_mean",data=df_meta,weights=df_meta.etr2_smc).fit()
 #rainmod_gpp_add = smf.ols("tau ~ ddrain_mean",data=df_meta).fit()

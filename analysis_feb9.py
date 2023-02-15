@@ -97,7 +97,14 @@ site_result = {}
 #%%
 #sites_late_season = pd.read_csv("gs_50_50_daynight_data.csv")
 #sites_late_season = pd.read_csv("data_gpp_sitewise_nosub_mm2.csv")
-sites_late_season = pd.read_csv("data_gpp_weight_slope.csv")
+#sites_late_season = pd.read_csv("data_gpp_weight_slope_feb14b.csv")
+
+sites_late_season = pd.read_csv("gpp_biome_wise_sg.csv")
+sites_late_season["gpp_frac"] = sites_late_season.gpp_pred/sites_late_season.gppmax
+
+site_max = sites_late_season.groupby("SITE_ID").max(numeric_only=True).reset_index()
+site_min = sites_late_season.groupby("SITE_ID").min(numeric_only=True).reset_index()
+
 #sites_late_season = pd.read_csv("data_gpp_evi_parsq.csv")
 
 #sites_late_season["kgpp"] = 1*sites_late_season["kgpp2"]
@@ -118,6 +125,10 @@ for site_id in pd.unique(sites_late_season.SITE_ID)[:]:#[forest_daily[x] for x i
     print(site_id)
     dfgpp = sites_late_season.loc[sites_late_season.SITE_ID==site_id].copy()
     dfgpp = dfgpp.loc[dfgpp.kgpp > 0].copy()
+    #%%
+    
+    #if np.max(dfgpp.gpp_frac) < 0.8 or np.min(dfgpp.gpp_frac) > 0.5:
+    #    continue
     #nyear_in_data = len(pd.unique(df_to_fit.year))
     #%%
     dfgpp["gppR2"] = 1- np.mean((dfgpp.gpp-dfgpp.gpp_pred)**2)/np.var(dfgpp.gpp)
@@ -125,10 +136,12 @@ for site_id in pd.unique(sites_late_season.SITE_ID)[:]:#[forest_daily[x] for x i
     dfgpp["gppR2_only_cond"] = np.corrcoef(dfgpp.cond, dfgpp.gpp)[0,1]**2
 
 
-    #rescond = cor_skipna(dfgpp.cond,  dfgpp.gpp_pred-dfgpp.gpp)
-    #resdoy = cor_skipna(dfgpp.doy,  dfgpp.gpp_pred-dfgpp.gpp)
+    rescond = cor_skipna(dfgpp.cond,  dfgpp.gpp_pred-dfgpp.gpp)
+    resdoy = cor_skipna(dfgpp.doy,  dfgpp.gpp_pred-dfgpp.gpp)
     
-    #dfgpp["cor_gres_cond"] = rescond[0]
+    dfgpp["cor_gres_cond"] = rescond[0]
+    dfgpp["pval_gres_cond"] = rescond[1]
+
     #dfgpp["cor_gres_doy"] = resdoy[0]
     
     #if rescond.pvalue < 0.05 or resdoy.pvalue < 0.05:
@@ -142,7 +155,7 @@ for site_id in pd.unique(sites_late_season.SITE_ID)[:]:#[forest_daily[x] for x i
         cor_si = cor_skipna(dfgpp.sinterp,dfgpp.cond)
         
         #if cor_si[0] > cor_wb[0]:
-        dfgpp["waterbal"] = 1*dfgpp.sinterp
+        dfgpp["waterbal"] = 1*dfgpp.sinterp#_gs
     
     except:
         continue
@@ -376,7 +389,6 @@ def qt_gt1(x,q):
 def mean_gt1(x):
     return np.mean(x[x >= 1])
 #%%
-df_meta = df1.copy()
 
 #%%
 simple_biomes = {"SAV":"Savanna",
@@ -392,7 +404,9 @@ simple_biomes = {"SAV":"Savanna",
 biome_list = ["Evergreen needleleaf forest", "Mixed forest", "Deciduous broadleaf forest", "Evergreen broadleaf forest",
               "Grassland","Shrubland","Savanna"]
 #%%
-df_meta["combined_biome"] = [simple_biomes[x] for x in df_meta["IGBP"]]
+df_meta = df1.copy()
+
+df_meta["combined_biome"] = [simple_biomes[x] for x in df_meta["IGBP_x"]]
 #df_meta = df_meta.loc[df_meta.gppR2 > df_meta.gppR2_null]
 #df_meta = df_meta.loc[df_meta.gppR2 > df_meta.gppR2_cond_only]
 #df_meta = df_meta.loc[df_meta.m0_r2/df_meta.m1_r2 > 0.5].copy()
@@ -469,6 +483,10 @@ df_meta = df_meta.loc[df_meta.rel_err > 0.1]
 resmean = all_results.groupby("SITE_ID").mean(numeric_only=True).reset_index()
 df_meta = pd.merge(df_meta,resmean[["SITE_ID","kgpp","gpp"]],how='left',on='SITE_ID')
 #df_meta = df_meta.loc[df_meta.summer_end - df_meta.summer_start - df_meta.tau > 0]
+#%%
+aunique = all_results.groupby("SITE_ID").nunique().reset_index().rename(columns={"year":"nyear"})
+df_meta = pd.merge(df_meta,aunique[["SITE_ID","nyear"]],how="left",on="SITE_ID")
+df_meta = df_meta.loc[df_meta.nyear >= 3]
 #%% 
 rainmod = smf.ols("tau ~ ddrain_mean",data=df_meta).fit()
 rainmodW = smf.wls("tau ~ ddrain_mean",data=df_meta,weights=df_meta.etr2_smc).fit()
@@ -515,10 +533,14 @@ all_results["cond_water_limited"] = all_results["pred_cond"] < all_results["gmax
 #all_results["ET_water_limited"] = all_results["et_tau"] < all_results["et_null"]
 amean = all_results.groupby("SITE_ID").mean(numeric_only=True).reset_index()
 #%%
-df_meta = pd.merge(df_meta,amean[["SITE_ID","cond_water_limited"]],how="left",on="SITE_ID")
+df_meta = pd.merge(df_meta,amean[["SITE_ID","cond_water_limited","gpp","gpp_pred","gpp_unc","g_unc"]],how="left",on="SITE_ID")
 #%%
 df_meta["DOM_DIST_MGMT"] = df_meta["DOM_DIST_MGMT"].fillna("None")
 #%%
+amax = all_results.groupby("SITE_ID").mean(numeric_only=True).reset_index().rename(columns={"gpp":"gpp_max_obs"})
+df_meta = pd.merge(df_meta,amax[["SITE_ID","gpp_max_obs"]],how="left",on="SITE_ID")
+#%%
+
 # smin = dfi.smin.iloc[0]
 # s_adj = dfi.waterbal/1000 - smin
 # slope = np.sqrt(1/(dfi.tau.iloc[0]*(60*60*24)))
@@ -535,7 +557,7 @@ df_meta["DOM_DIST_MGMT"] = df_meta["DOM_DIST_MGMT"].fillna("None")
 # Two patches acting independently
 # A(g) = A((g1+g2)/2)/2 = (L*(1-exp(-g1/L*k)) + L*(1-exp(-g2/L*k)))/2
 # A(g) = L*
-#%%
+#%%f
 # g95 = []
 # a95 = []
 
@@ -546,4 +568,7 @@ df_meta["DOM_DIST_MGMT"] = df_meta["DOM_DIST_MGMT"].fillna("None")
 #     a95.append(np.median(higpp.gpp))
     #%%
 plt.figure()
-plt.plot(df_meta.gpp_y,rainmod.resid,'o')
+plt.plot(df_meta.gpp_y/df_meta.gpp_pred_y,rainmod.resid,'o')
+#%%
+plt.figure()
+plt.plot(df_meta.kgpp_y,rainmod.resid,'o')

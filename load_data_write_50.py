@@ -21,7 +21,7 @@ import statsmodels.api as sm
 import scipy.optimize
 import glob
 import statsmodels.formula.api as smf
-
+import datetime
 import matplotlib as mpl
 #%%
 do_bif = 0
@@ -83,17 +83,21 @@ def fill_na2(x,y):
 
 #%%
 def prepare_df(fname, site_id, bif_forest):
+    #%%
     df = pd.read_csv(fname,parse_dates=["TIMESTAMP"])
     df[df==-9999] = np.nan
+    latdeg = bif_forest.loc[bif_forest.SITE_ID==site_id].LOCATION_LAT.iloc[0]
+
+    if latdeg < 0:
+        df["TIMESTAMP"] += datetime.timedelta(days=182)
+    
     
     df["date"] = df["TIMESTAMP"].dt.date
     df["hour"] = df["TIMESTAMP"].dt.hour
     df["doy"] = df["TIMESTAMP"].dt.dayofyear
     site_id = fname.split("\\")[-1].split('_')[1]
     #print(site_id)
-    latdeg = bif_forest.loc[bif_forest.SITE_ID==site_id].LOCATION_LAT.iloc[0]
-    if latdeg < 0:
-        df["doy"] = (df["doy"]+182) % 365
+    
     df["year"] = df["TIMESTAMP"].dt.year
     #%%
     
@@ -159,7 +163,7 @@ def prepare_df(fname, site_id, bif_forest):
     #%%
     my_clim = df.groupby("doy").mean(numeric_only=True)
     
-    gpp_clim = np.array(1*my_clim["GPP_DT_VUT_REF"] + 1*my_clim["GPP_NT_VUT_REF"])/2
+    gpp_clim = np.array(2*my_clim["GPP_DT_VUT_REF"] + 0*my_clim["GPP_NT_VUT_REF"])/2
     
     
     gpp_clim_std = gpp_clim - np.nanmin(gpp_clim)
@@ -219,7 +223,7 @@ def prepare_df(fname, site_id, bif_forest):
         to_replace = df.year.isin(bad_year)
         p_in[to_replace] = dfm.P_F_c[to_replace]
         et_out[to_replace] = dfm.LE_all_c[to_replace] / 44200 * 18/1000 * 60*60*24
-    
+    #%%
     else:
         #inflow = np.mean(et_out) - np.mean(p_in)
         #to_replace = []
@@ -253,6 +257,20 @@ def prepare_df(fname, site_id, bif_forest):
     except AttributeError:
         pass
     
+    is_summer = (doy_summer >= summer_start)*(doy_summer <= summer_end)
+    is_late_summer = is_summer #(doy_summer >= topday)*(doy_summer <= summer_end)
+    #%%
+    sinterp_onlygs = np.nan*smc_summer
+    try:
+        bothgood = np.isfinite(smc_summer*waterbal_corr)*is_summer
+        try:
+            sinterp_onlygs[is_summer] = np.interp(smc_summer[is_summer],np.sort(smc_summer[bothgood]),np.sort(waterbal_corr[bothgood]))
+        except ValueError:
+            pass
+    except AttributeError:
+        pass
+    
+    #%%
     
    # ground_heat = 0
     
@@ -288,15 +306,15 @@ def prepare_df(fname, site_id, bif_forest):
     daily_cond = inv2_varTP
     daily_cond[daily_cond > 2] = np.nan
     daily_cond[daily_cond <= 0] = np.nan
-    gpp_summer = np.array(1*df["GPP_DT_VUT_REF"] + 1*df["GPP_NT_VUT_REF"])/2
+    gpp_summer = np.array(2*df["GPP_DT_VUT_REF"] + 0*df["GPP_NT_VUT_REF"])/2
+    gpp_summer_nt = np.array(df["GPP_NT_VUT_REF"])
+
+
     #airt_summer[airt_summer < 0] = np.nan
     gpp_summer[gpp_summer < 0] = np.nan
     
     nee_qc = np.array(df.NEE_VUT_REF_QC)
     gpp_summer[nee_qc < 0.5] = np.nan
-    
-    is_summer = (doy_summer >= summer_start)*(doy_summer <= summer_end)
-    is_late_summer = is_summer #(doy_summer >= topday)*(doy_summer <= summer_end)
     
     pet = petVnum/(sV+gammaV)
 
@@ -348,9 +366,13 @@ def prepare_df(fname, site_id, bif_forest):
                               "vpd":vpd_summer,
                               "et_unc":df.LE_RANDUNC/44200,
                               #"sinterp":sinterp
-                              "nee_unc":df.NEE_VUT_REF_RANDUNC/-df.NEE_VUT_REF,
+                              "nee_unc":df.NEE_VUT_REF_RANDUNC,#,/-df.NEE_VUT_REF,
+                              #"gpp_unc_DT":(df.GPP_DT_VUT_75-df.GPP_DT_VUT_25),#/df.GPP_DT_VUT_REF,
+                              #"gpp_unc_NT":(df.GPP_NT_VUT_75-df.GPP_NT_VUT_25),#/df.GPP_NT_VUT_REF,
                               "gpp_unc":(df.GPP_DT_VUT_75-df.GPP_DT_VUT_25)/df.GPP_DT_VUT_REF,
+                              "gpp_nt" : gpp_summer_nt,
                               "summer_start":summer_start,
+
                               "summer_end":summer_end,
                               "summer_peak":topday
                               #"PET":pet
@@ -358,9 +380,11 @@ def prepare_df(fname, site_id, bif_forest):
     if np.sum(np.isfinite(smc_summer)) > 0:
         if np.sum(np.isfinite(sinterp)) > 0:
             df_to_fit_full["sinterp"] = sinterp
+            df_to_fit_full["sinterp_gs"] = sinterp_onlygs
             df_to_fit_full["smc"] = smc_summer
         else:
             df_to_fit_full["sinterp"] = np.nan
+            df_to_fit_full["sinterp_gs"] = np.nan
             df_to_fit_full["smc"] = np.nan
         
                               #"LE_unc":df.LE_RANDUNC/44200})
@@ -375,7 +399,7 @@ def prepare_df(fname, site_id, bif_forest):
 #%%
     #df_to_fit = df_to_fit.loc[df_to_fit.doy >= topday].copy()
     df_to_fit = df_to_fit.loc[(df_to_fit.et_unc / df_to_fit.ET) <= 0.2].copy()
-    
+    #df_to_fit["gpp_unc"] = (df_to_fit["gpp_unc_DT"] + df_to_fit["gpp_unc_NT"])/2/df_to_fit.gpp
     
     #%%
     gpp_qc = np.array(df_to_fit.gpp)
@@ -458,7 +482,7 @@ for fname in forest_daily:#[forest_daily[x] for x in [70,76]]:
     all_results.append(df_to_fit)
     #%%
 all_results = pd.concat(all_results)
-all_results.to_csv("gs_50_50_nosub_dn.csv")
+all_results.to_csv("gs_50_50_sinterp_summer.csv")
 #%%
 # sites = []
 # years = []

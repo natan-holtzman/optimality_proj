@@ -73,6 +73,14 @@ def meancols(df,varname):
     best_col = sel_cols[np.argmax(col_count)]
     return df[best_col]
 
+
+def lastcols(df,varname):
+    sel_cols = getcols(df,varname)
+    if len(sel_cols) == 0:
+        return np.nan*np.zeros(len(df)), "none"
+    best_col = sel_cols[-1]
+    return df[best_col], best_col
+
 def fill_na(x):
     return np.interp(np.arange(len(x)), np.arange(len(x))[np.isfinite(x)], x[np.isfinite(x)])
 
@@ -214,21 +222,23 @@ def prepare_df(fname, site_id, bif_forest):
     et_out = fill_na2(et_summer * 18/1000 * 60*60*24,np.array(dfm["LE_all_c"] / 44200 * 18/1000 * 60*60*24))
     doy_summer = np.array(df["doy"])
     #%%
-    if np.mean(et_out) < np.mean(p_in):
-        #inflow = 0
-        yeardf = df.groupby("year").sum(numeric_only=True).reset_index()
-        yearET = yeardf.LE_F_MDS / 44200 * (18/1000) * (60*60*24)
-        bad_year = yeardf.loc[yeardf.P_F < yearET].year
+    # if np.mean(et_out) < np.mean(p_in):
+    #     #inflow = 0
+    #     yeardf = df.groupby("year").sum(numeric_only=True).reset_index()
+    #     yearET = yeardf.LE_F_MDS / 44200 * (18/1000) * (60*60*24)
+    #     bad_year = yeardf.loc[yeardf.P_F < yearET].year
         
-        to_replace = df.year.isin(bad_year)
-        p_in[to_replace] = dfm.P_F_c[to_replace]
-        et_out[to_replace] = dfm.LE_all_c[to_replace] / 44200 * 18/1000 * 60*60*24
+    #     to_replace = df.year.isin(bad_year)
+    #     p_in[to_replace] = dfm.P_F_c[to_replace]
+    #     et_out[to_replace] = dfm.LE_all_c[to_replace] / 44200 * 18/1000 * 60*60*24
+    
+    # else:
+    #     inflow = np.mean(et_out) - np.mean(p_in)
+    #     to_replace = []
+        #return "ET exceeds P"
     #%%
-    else:
-        #inflow = np.mean(et_out) - np.mean(p_in)
-        #to_replace = []
-        return "ET exceeds P"
-    #%%
+    
+    inflow = max(0, np.mean(et_out) - np.mean(p_in))
     
     wbi = 0
     waterbal_raw = np.zeros(len(doy_summer))
@@ -239,15 +249,20 @@ def prepare_df(fname, site_id, bif_forest):
         #if dayi == opposite_peak:
         #    wbi = 0
     waterbal_corr = 1*waterbal_raw
-    waterbal_corr[to_replace] = np.nan
+    #waterbal_corr[to_replace] = np.nan
     
     #%%
     waterbal_corr[np.isnan(et_summer)] = np.nan
     
     
-    smc_summer = np.array(meancols(df,'SWC'))
+    smc_summer, smc_name = lastcols(df,'SWC')
+    smc_summer = np.array(smc_summer)
+    #%%
+    if np.mean(np.isfinite(smc_summer)) == 0:
+        return "No soil moisture data"
+    
     try:
-        smc_qc = np.array(df.SWC_F_MDS_1_QC)
+        smc_qc = np.array(df[smc_name + "_QC"])
         smc_summer[smc_qc==0] = np.nan
         bothgood = np.isfinite(smc_summer*waterbal_corr)
         try:
@@ -256,7 +271,7 @@ def prepare_df(fname, site_id, bif_forest):
             sinterp = np.nan*smc_summer
     except AttributeError:
         pass
-    
+    #%%
     is_summer = (doy_summer >= summer_start)*(doy_summer <= summer_end)
     is_late_summer = is_summer #(doy_summer >= topday)*(doy_summer <= summer_end)
     #%%
@@ -269,6 +284,21 @@ def prepare_df(fname, site_id, bif_forest):
             pass
     except AttributeError:
         pass
+    #%%
+    df["smc"] = smc_summer
+    df["waterbal"] = waterbal_corr
+    #%%
+    dfyear = df.groupby("year").mean(numeric_only=True).reset_index()
+    dfgpp = pd.merge(df,dfyear[["year","smc","waterbal"]],on="year",how="left")
+    #%%
+    s_anom = dfgpp.smc_x-dfgpp.smc_y
+    w_anom = dfgpp.waterbal_x-dfgpp.waterbal_y
+    # sint_anom = np.interp(s_anom,
+    #                       np.sort(s_anom),
+    #                       np.sort(w_anom)) + dfgpp.smc_y * np.std(w_anom)/np.std(s_anom)
+  #%%
+    sint_anom = w_anom + dfgpp.smc_y * np.std(w_anom)/np.std(s_anom)
+  #%%
     
     #%%
     
@@ -382,10 +412,14 @@ def prepare_df(fname, site_id, bif_forest):
             df_to_fit_full["sinterp"] = sinterp
             df_to_fit_full["sinterp_gs"] = sinterp_onlygs
             df_to_fit_full["smc"] = smc_summer
+            df_to_fit_full["sinterp_anom"] = sint_anom
+
         else:
             df_to_fit_full["sinterp"] = np.nan
             df_to_fit_full["sinterp_gs"] = np.nan
             df_to_fit_full["smc"] = np.nan
+            df_to_fit_full["sinterp_anom"] = np.nan
+
         
                               #"LE_unc":df.LE_RANDUNC/44200})
     df_to_fit = df_to_fit_full.loc[is_summer].dropna()
@@ -394,6 +428,9 @@ def prepare_df(fname, site_id, bif_forest):
     
     df_to_fit = df_to_fit.loc[df_to_fit.rain==0]
     df_to_fit = df_to_fit.loc[df_to_fit.rain_prev==0]
+
+    
+    df_to_fit["inflow"] = inflow
 
 #    df_to_fit = df_to_fit.loc[(df_to_fit.doy >= topday)*(df_to_fit.vpd >= 0.5)].copy()
 #%%
@@ -482,7 +519,7 @@ for fname in forest_daily:#[forest_daily[x] for x in [70,76]]:
     all_results.append(df_to_fit)
     #%%
 all_results = pd.concat(all_results)
-all_results.to_csv("gs_50_50_sinterp_summer.csv")
+all_results.to_csv("gs_50_50_include_unbalance5.csv")
 #%%
 # sites = []
 # years = []
@@ -496,4 +533,4 @@ all_results.to_csv("gs_50_50_sinterp_summer.csv")
 # raindf = pd.DataFrame({"SITE_ID":np.concatenate(sites),
 #                       "year":np.concatenate(years),
 #                       "rain_mm":np.concatenate(rains)})
-# raindf.to_csv("rain_50_50_nosub.csv")
+# raindf.to_csv("rain_50_50_include_unbalance3.csv")

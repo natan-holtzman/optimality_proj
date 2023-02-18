@@ -77,7 +77,7 @@ def fit_tau_res(dfi):
     final_cond = np.clip(np.sqrt(2*beta_s*k_samp*zsoil_mol*s_adj/(vpd_samp/100) + rescond**2),0,gmax)
     et_out = petVnum_samp*final_cond/(gammaV*(fac1 + final_cond)+sV_samp*final_cond)/44200
     
-    #dfi["pred_cond"] = np.sqrt(2*k_samp*zsoil_mol*s_adj/(vpd_samp/100))
+    dfi["pred_cond"] = final_cond
     #%%
     dfi["gmax"] = gmax
     #dfi["gmin"] = gmin

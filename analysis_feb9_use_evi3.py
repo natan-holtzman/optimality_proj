@@ -160,7 +160,7 @@ site_result = {}
 #rain_data = pd.read_csv("rain_late_season.csv")
 #%%
 #sites_late_season = pd.read_csv("gs_50_50_include_unbalance3_baseline.csv")
-sites_late_season = pd.read_csv("gs_50_50_include_unbalance5.csv")
+sites_late_season = pd.read_csv("gs_50_50_include_unbalance6.csv")
 
 
 #sites_late_season["gpp"] = (sites_late_season["gpp_qc"] + sites_late_season["gpp_nt"])/2 
@@ -304,7 +304,7 @@ plt.plot([0,15],[0,15])
 #%%
 sites_late_season["kgpp"] = sites_late_season["gppmax2"]/slope_arr/sites_late_season["slope_fac"]
 #%%
-
+sites_late_season["SITE_year"] = sites_late_season["SITE_ID"] + sites_late_season["year"].astype(str)
 #mult_array = np.exp(np.linspace(np.log(0.5),np.log(2),50))
 #%%
 all_results = []
@@ -315,12 +315,12 @@ for site_id in pd.unique(sites_late_season.SITE_ID)[:]:#[forest_daily[x] for x i
     dfgpp = sites_late_season.loc[sites_late_season.SITE_ID==site_id].copy()
     dfgpp = dfgpp.loc[dfgpp.kgpp > 0].copy()
     #%%
-    if len(dfgpp) == 0:
+    if len(dfgpp) < 10:
         continue
     #%%
     dfgpp["gppR2"] = 1- np.mean((dfgpp.gpp-dfgpp.gpp_pred)**2)/np.var(dfgpp.gpp)
-    #dfgpp["gppR2_no_cond"] = np.corrcoef(dfgpp.gppmax, dfgpp.gpp)[0,1]**2
-    #dfgpp["gppR2_only_cond"] = np.corrcoef(dfgpp.cond, dfgpp.gpp)[0,1]**2
+    dfgpp["gppR2_no_cond"] = np.corrcoef(dfgpp.gppmax2, dfgpp.gpp)[0,1]**2
+    dfgpp["gppR2_only_cond"] = np.corrcoef(dfgpp.cond, dfgpp.gpp)[0,1]**2
 
 #%%s
     # dfgpp["waterbal"] = 1*dfgpp.waterbal_x
@@ -330,6 +330,11 @@ for site_id in pd.unique(sites_late_season.SITE_ID)[:]:#[forest_daily[x] for x i
     
     
     dfi = fit_tau_res(dfgpp.copy())#.copy()
+    #%%
+    mysel = (dfi.pred_cond < dfi.gmax)*(dfi.pred_cond > dfi.res_cond)
+    dfi["etr2_limited_null"] = np.corrcoef(dfi.et_null[mysel],dfi.ET[mysel])[0,1]**2
+    dfi["etr2_limited_smc"] = np.corrcoef(dfi.et_tau[mysel],dfi.ET[mysel])[0,1]**2
+    dfi["n_limited"] = np.sum(mysel > 0)
     #%%
     #dfi = fit_tau_res_assume_max(dfgpp.copy(),0.25)#.copy()
     #dfi = fit_tau_res_width(dfgpp.copy())#.copy()
@@ -353,8 +358,8 @@ site_year = np.array(all_results.groupby("SITE_ID").nunique()["year"])
 
 #%%
 df1 = all_results.groupby("SITE_ID").first().reset_index()
-df1["site_count"] = site_count
-df1["year_count"] = site_year
+#df1["site_count"] = site_count
+#df1["year_count"] = site_year
 
 df1["Aridity"] = df1.mean_netrad / (df1.map_data / (18/1000 * 60*60*24) * 44200)
 #df1["Aridity_gs"] = df1.gs_netrad / (df1.mgsp_data / (18/1000 * 60*60*24) * 44200)
@@ -406,7 +411,7 @@ df_meta["ftest"] = 1-scipy.stats.f.cdf(x=fval,dfn=1,dfd=df_meta.npoints-4)
 df_meta = df_meta.loc[df_meta.gppR2 > 0.0].copy()
 #%%
 #df_meta = df_meta.loc[df_meta.gppR2-df_meta.gppR2_no_cond > 0.0]
-#df_meta = df_meta.loc[df_meta.gppR2-df_meta.gppR2_only_cond > 0.0]
+df_meta = df_meta.loc[df_meta.gppR2-df_meta.gppR2_only_cond > 0.0]
 df_meta = df_meta.loc[df_meta.smin > -10]
 #%%
 df_meta = df_meta.loc[df_meta.tau > 0]
@@ -417,6 +422,9 @@ df_meta = df_meta.loc[df_meta.tau > 0]
 df_meta["rel_err"] = (df_meta.etr2_smc-df_meta.etr2_null)/(1-df_meta.etr2_null)
 #%%
 df_meta = df_meta.loc[df_meta.rel_err > 0.1]
+#%%
+#df_meta["rel_err_lim"] = (df_meta.etr2_limited_smc-df_meta.etr2_limited_null)/(1-df_meta.etr2_limited_null)
+
 #%%
 resmean = all_results.groupby("SITE_ID").mean(numeric_only=True).reset_index()
 df_meta = pd.merge(df_meta,resmean[["SITE_ID","kgpp","gpp","gpp_pred"]],how='left',on='SITE_ID')
@@ -455,7 +463,7 @@ for i in range(len(biome_list)):
         points_handles.append(pointI)
 
 ax.set_xlim(0,250)
-ax.set_ylim(0,250)
+ax.set_ylim(0,200)
 ax.set_xlabel("Annual-mean longest dry period (days)",fontsize=24)
 ax.set_ylabel(r"$\tau$ (days)",fontsize=24)
 

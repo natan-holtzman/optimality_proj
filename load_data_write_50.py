@@ -288,7 +288,10 @@ def prepare_df(fname, site_id, bif_forest):
     df["smc"] = smc_summer
     df["waterbal"] = waterbal_corr
     #%%
-    dfyear = df.groupby("year").mean(numeric_only=True).reset_index()
+#    dfyear = df.groupby("year").mean(numeric_only=True).reset_index()
+    dfyear = df.groupby("year").min(numeric_only=True).reset_index()
+
+
     dfgpp = pd.merge(df,dfyear[["year","smc","waterbal"]],on="year",how="left")
     #%%
     s_anom = dfgpp.smc_x-dfgpp.smc_y
@@ -519,7 +522,7 @@ for fname in forest_daily:#[forest_daily[x] for x in [70,76]]:
     all_results.append(df_to_fit)
     #%%
 all_results = pd.concat(all_results)
-all_results.to_csv("gs_50_50_include_unbalance5.csv")
+all_results.to_csv("gs_50_50_include_unbalance6.csv")
 #%%
 # sites = []
 # years = []

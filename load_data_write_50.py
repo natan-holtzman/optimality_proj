@@ -51,6 +51,11 @@ plt.rcParams["mathtext.default"] = "sf"
 import matplotlib.dates as mdates
 myFmt = mdates.DateFormatter('%b %Y')
 #%%
+
+def cor_skipna2(x,y):
+    goodxy = np.isfinite(x*y)
+    return np.corrcoef(x[goodxy],y[goodxy])[0,1]
+
 #filename_list = glob.glob("processed_nov7b/*.csv")
 #from functions_from_nov16 import prepare_df#, fit_gpp, fit_tau
 #from use_w_function import fit_gpp_mm, fit_tau_mm
@@ -186,7 +191,7 @@ def prepare_df(fname, site_id, bif_forest):
     gpp_clim_smooth_raw = gpp_smooth[366:366*2]
     gpp_clim_smooth = gpp_clim_smooth_raw #- np.min(gpp_clim_smooth_raw)
     topday = np.argmax(gpp_clim_smooth)
-    under50 = np.where(gpp_clim_smooth < 0.5*np.nanmax(gpp_clim_smooth))[0]
+    under50 = np.where(gpp_clim_smooth < 0.67*np.nanmax(gpp_clim_smooth))[0]
 
     try:
         summer_start = under50[under50 < topday][-1]
@@ -287,11 +292,13 @@ def prepare_df(fname, site_id, bif_forest):
     #%%
     df["smc"] = smc_summer
     df["waterbal"] = waterbal_corr
+    
+    #my_clim2 = df.groupby("doy").mean(numeric_only=True)
+#    sint_mult = smc_summer * np.std(my_clim2.waterbal)/np.std(my_clim2.smc)
+    
     #%%
 #    dfyear = df.groupby("year").mean(numeric_only=True).reset_index()
-    dfyear = df.groupby("year").min(numeric_only=True).reset_index()
-
-
+    dfyear = df.loc[:].groupby("year").min(numeric_only=True).reset_index()
     dfgpp = pd.merge(df,dfyear[["year","smc","waterbal"]],on="year",how="left")
     #%%
     s_anom = dfgpp.smc_x-dfgpp.smc_y
@@ -300,9 +307,62 @@ def prepare_df(fname, site_id, bif_forest):
     #                       np.sort(s_anom),
     #                       np.sort(w_anom)) + dfgpp.smc_y * np.std(w_anom)/np.std(s_anom)
   #%%
-    sint_anom = w_anom + dfgpp.smc_y * np.std(w_anom)/np.std(s_anom)
+    sint_min = w_anom + dfgpp.smc_y * np.std(w_anom)/np.std(s_anom)
   #%%
+    dfyear = df.loc[:].groupby("year").mean(numeric_only=True).reset_index()
+    dfgpp = pd.merge(df,dfyear[["year","smc","waterbal"]],on="year",how="left")
+    s_anom = dfgpp.smc_x-dfgpp.smc_y
+    w_anom = dfgpp.waterbal_x-dfgpp.waterbal_y
+    sint_mean = w_anom + dfgpp.smc_y * np.std(w_anom)/np.std(s_anom)
+    #%%
+    sint_anom = np.interp(s_anom,
+                          np.sort(s_anom),
+                          np.sort(w_anom)) + dfgpp.smc_y * np.std(w_anom)/np.std(s_anom)
+  #%%
+    sint_mult = smc_summer * np.std(w_anom)/np.std(s_anom)
+#%%
+    def yrm(x):
+        xinterp = np.interp(np.arange(len(x)),np.arange(len(x))[np.isfinite(x)],x[np.isfinite(x)])
+        y = np.cumsum(xinterp)
+        ans = np.zeros(len(x))
+        ans[182:-182] = (y[364:] - y[:-364])/364
+        ans[:182] = ans[183]
+        ans[-182:] = ans[-183]
+        return ans
     
+    s_rm = yrm(smc_summer)
+    w_rm = yrm(waterbal_corr)
+    s_anom = smc_summer - s_rm
+    w_anom = waterbal_corr - w_rm
+    
+    sint_mean2 = w_anom + s_rm * np.nanstd(w_anom)/np.nanstd(s_anom)
+    
+    sint_anom2 = np.interp(s_anom,
+                          np.sort(s_anom),
+                          np.sort(w_anom)) + s_rm * np.nanstd(w_anom)/np.nanstd(s_anom)
+
+    
+    #my_clim2 = df.groupby("doy").mean(numeric_only=True)
+    # lags = np.arange(90)
+    # lag_cors = np.zeros(90)
+    # for lagj in lags:
+    #     lag_cors[lagj] = cor_skipna2(s_anom[lagj:len(s_anom)-90+lagj], w_anom[90:])
+    # #%%
+    # best_lag = lags[np.argmax(lag_cors)]
+    # s_anom_lag = 1*s_anom
+    # if best_lag > 0:
+    #     s_anom_lag[best_lag:] = 1*s_anom[:-best_lag]
+    
+    # sint_anom_lag = np.interp(s_anom_lag,
+    #                       np.sort(s_anom),
+    #                       np.sort(w_anom)) + dfgpp.smc_y * np.std(w_anom)/np.std(s_anom)
+  
+    #%%
+    dfyear = df.loc[:].groupby("year").median(numeric_only=True).reset_index()
+    dfgpp = pd.merge(df,dfyear[["year","smc","waterbal"]],on="year",how="left")
+    s_anom = dfgpp.smc_x-dfgpp.smc_y
+    w_anom = dfgpp.waterbal_x-dfgpp.waterbal_y
+    sint_median = w_anom + dfgpp.smc_y * np.std(w_anom)/np.std(s_anom)
     #%%
     
    # ground_heat = 0
@@ -410,27 +470,47 @@ def prepare_df(fname, site_id, bif_forest):
                               "summer_peak":topday
                               #"PET":pet
                               })
-    if np.sum(np.isfinite(smc_summer)) > 0:
-        if np.sum(np.isfinite(sinterp)) > 0:
-            df_to_fit_full["sinterp"] = sinterp
-            df_to_fit_full["sinterp_gs"] = sinterp_onlygs
-            df_to_fit_full["smc"] = smc_summer
-            df_to_fit_full["sinterp_anom"] = sint_anom
+    
+    def fill_summer(x):
+        ans = np.zeros(len(df))
+        ans[is_summer] = 1*x
+        return ans
+    
+    df_to_fit_full["sinterp"] = sinterp
+    df_to_fit_full["sinterp_gs"] = sinterp_onlygs
+    df_to_fit_full["smc"] = smc_summer
+    df_to_fit_full["sinterp_anom"] = sint_anom
+#    df_to_fit_full["sinterp_anom_lag"] = sint_anom_lag
+    df_to_fit_full["sinterp_mult"] = sint_mult
 
-        else:
-            df_to_fit_full["sinterp"] = np.nan
-            df_to_fit_full["sinterp_gs"] = np.nan
-            df_to_fit_full["smc"] = np.nan
-            df_to_fit_full["sinterp_anom"] = np.nan
+    df_to_fit_full["sinterp_min"] = sint_min
+    df_to_fit_full["sinterp_mean"] = sint_mean
+    df_to_fit_full["sinterp_mean2"] = sint_mean2
+    df_to_fit_full["sinterp_anom2"] = sint_anom2
+
+    df_to_fit_full["sinterp_median"] = sint_median
+    
+    # if np.sum(np.isfinite(smc_summer)) > 0:
+    #     if np.sum(np.isfinite(sinterp)) > 0:
+    #         df_to_fit_full["sinterp"] = sinterp
+    #         df_to_fit_full["sinterp_gs"] = sinterp_onlygs
+    #         df_to_fit_full["smc"] = smc_summer
+    #         df_to_fit_full["sinterp_anom"] = sint_anom
+
+    #     else:
+    #         df_to_fit_full["sinterp"] = np.nan
+    #         df_to_fit_full["sinterp_gs"] = np.nan
+    #         df_to_fit_full["smc"] = np.nan
+    #         df_to_fit_full["sinterp_anom"] = np.nan
 
         
                               #"LE_unc":df.LE_RANDUNC/44200})
-    df_to_fit = df_to_fit_full.loc[is_summer].dropna()
+    df_to_fit = df_to_fit_full.loc[is_summer].dropna(subset = set(df_to_fit_full.columns)-{"sinterp_anom","sint_mult","sinterp_mean2","sinterp_anom2"})
 
     df_to_fit = df_to_fit.loc[df_to_fit.par >= 100]
     
     df_to_fit = df_to_fit.loc[df_to_fit.rain==0]
-    df_to_fit = df_to_fit.loc[df_to_fit.rain_prev==0]
+    #df_to_fit = df_to_fit.loc[df_to_fit.rain_prev==0]
 
     
     df_to_fit["inflow"] = inflow
@@ -438,7 +518,7 @@ def prepare_df(fname, site_id, bif_forest):
 #    df_to_fit = df_to_fit.loc[(df_to_fit.doy >= topday)*(df_to_fit.vpd >= 0.5)].copy()
 #%%
     #df_to_fit = df_to_fit.loc[df_to_fit.doy >= topday].copy()
-    df_to_fit = df_to_fit.loc[(df_to_fit.et_unc / df_to_fit.ET) <= 0.2].copy()
+    #df_to_fit = df_to_fit.loc[(df_to_fit.et_unc / df_to_fit.ET) <= 0.2].copy()
     #df_to_fit["gpp_unc"] = (df_to_fit["gpp_unc_DT"] + df_to_fit["gpp_unc_NT"])/2/df_to_fit.gpp
     
     #%%
@@ -522,18 +602,18 @@ for fname in forest_daily:#[forest_daily[x] for x in [70,76]]:
     all_results.append(df_to_fit)
     #%%
 all_results = pd.concat(all_results)
-all_results.to_csv("gs_50_50_include_unbalance6.csv")
+all_results.to_csv("gs_67_67_include_unbalance_feb25.csv")
 #%%
-# sites = []
-# years = []
-# rains = []
-# for x in rain_dict.keys():
-#     ri = rain_dict[x][0]
-#     sites.append(np.array([x]*len(ri)))
-#     years.append(rain_dict[x][1])
-#     rains.append(ri)
-# #%%
-# raindf = pd.DataFrame({"SITE_ID":np.concatenate(sites),
-#                       "year":np.concatenate(years),
-#                       "rain_mm":np.concatenate(rains)})
-# raindf.to_csv("rain_50_50_include_unbalance3.csv")
+sites = []
+years = []
+rains = []
+for x in rain_dict.keys():
+    ri = rain_dict[x][0]
+    sites.append(np.array([x]*len(ri)))
+    years.append(rain_dict[x][1])
+    rains.append(ri)
+#%%
+raindf = pd.DataFrame({"SITE_ID":np.concatenate(sites),
+                      "year":np.concatenate(years),
+                      "rain_mm":np.concatenate(rains)})
+raindf.to_csv("rain_67_67_include_unbalance_feb25.csv")

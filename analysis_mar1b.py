@@ -218,7 +218,7 @@ for site_id in pd.unique(sites_late_season.SITE_ID)[:]:#[forest_daily[x] for x i
     #dfgpp = dfgpp.loc[dfgpp.cond < np.quantile(dfgpp.cond,0.95)]
     #dfgpp = dfgpp.loc[dfgpp.cond > np.quantile(dfgpp.cond,0.1)]
     #dfgpp = dfgpp.loc[dfgpp.LAIint_rel >= 0.75]
-    dfgpp = dfgpp.loc[dfgpp.drel_both >= 0]
+    #dfgpp = dfgpp.loc[dfgpp.drel_both >= 0]
     dfgpp = dfgpp.loc[dfgpp.kgpp > 0].copy()
     dfgpp = dfgpp.loc[np.isfinite(dfgpp.sinterp_mean2)].copy()
     #%%
@@ -227,7 +227,7 @@ for site_id in pd.unique(sites_late_season.SITE_ID)[:]:#[forest_daily[x] for x i
     dfgpp["cond_lo_smc"] = np.nanmedian(dfgpp.cond[lo_soil])
     dfgpp["cond_hi_smc"] = np.nanmedian(dfgpp.cond[hi_soil])
 
-    cond_dq = dfgpp.cond / np.sqrt(dfgpp.vpd)
+    cond_dq = dfgpp.cond * np.sqrt(dfgpp.vpd)
     dfgpp["acond_lo_smc"] = np.nanmedian(cond_dq[lo_soil])
     dfgpp["acond_hi_smc"] = np.nanmedian(cond_dq[hi_soil])
     
@@ -245,7 +245,7 @@ for site_id in pd.unique(sites_late_season.SITE_ID)[:]:#[forest_daily[x] for x i
     # dfgpp.ET *= 0.6/dfgpp.dayfrac
     
     #%%
-    #spring_arr = np.abs(np.array(dfgpp.drel_spring))
+    spring_arr = np.abs(np.array(dfgpp.drel_spring))
     fall_arr = np.array(dfgpp.drel_fall)
     # gm_arr = np.array(dfgpp.gppmax)
     gpp_arr = np.array(dfgpp.gpp)
@@ -262,15 +262,15 @@ for site_id in pd.unique(sites_late_season.SITE_ID)[:]:#[forest_daily[x] for x i
     #%%
     slope0 = 100
     def gpp_opt(pars):
-        gppmax = pars[0] * (1 - pars[1]*fall_arr) * (par_arr)**pars[2]
+        gppmax = pars[0] * (1 - pars[1]*fall_arr - pars[3]*spring_arr) * (par_arr)**pars[2]
         gpp_pred = gppmax*(1-np.exp(-cond_arr*slope0/gppmax))
         return (gpp_pred-gpp_arr)#[np.isfinite(gpp_samp)]
     
-    fit0 = np.array([gpp_allmax,0.1,0.5])
+    fit0 = np.array([gpp_allmax,0.1,0.5,0.1])
     gpp_optres = scipy.optimize.least_squares(gpp_opt,x0=fit0,method="lm")#,x_scale=np.abs(fit0))
     #%%
     pars = gpp_optres.x
-    gppmax = pars[0] * (1 - pars[1]*fall_arr) * (par_arr)**pars[2]
+    gppmax = pars[0] * (1 - pars[1]*fall_arr - pars[3]*spring_arr) * (par_arr)**pars[2]
     gpp_pred = gppmax*(1-np.exp(-cond_arr*slope0/gppmax))
     
     #%%
@@ -283,7 +283,10 @@ for site_id in pd.unique(sites_late_season.SITE_ID)[:]:#[forest_daily[x] for x i
     dfgpp["gppR2"] = np.corrcoef(dfgpp.gpp_pred, dfgpp.gpp)[0,1]**2
     dfgpp["gppR2_no_cond"] = np.corrcoef(dfgpp.gppmax, dfgpp.gpp)[0,1]**2
     dfgpp["gppR2_only_cond"] = np.corrcoef(dfgpp.cond, dfgpp.gpp)[0,1]**2
-
+#%%
+    cond_a3 = dfgpp.cond * np.sqrt(dfgpp.vpd) / np.sqrt(dfgpp.kgpp)
+    dfgpp["bcond_lo_smc"] = np.nanmedian(cond_a3[lo_soil])
+    dfgpp["bcond_hi_smc"] = np.nanmedian(cond_a3[hi_soil])
 #%%s
     #dfgpp.kgpp = np.median(dfgpp.kgpp)
     # dfgpp["waterbal"] = 1*dfgpp.waterbal_x
@@ -492,7 +495,7 @@ df_meta = df_meta.loc[df_meta.tau > 0]
 #%%
 df_meta["rel_err"] = (df_meta.etr2_smc-df_meta.etr2_null)#/(1-df_meta.etr2_null)
 #%%
-#df_meta = df_meta.loc[df_meta.rel_err > 0.05]
+df_meta = df_meta.loc[df_meta.rel_err > 0.05]
 #%%
 #df_meta["rel_err_lim"] = (df_meta.etr2_limited_smc-df_meta.etr2_limited_null)/(1-df_meta.etr2_limited_null)
 

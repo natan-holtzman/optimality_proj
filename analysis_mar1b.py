@@ -73,18 +73,20 @@ site_result = {}
 #sites_late_season = pd.read_csv("late_summer_data.csv")
 #rain_data = pd.read_csv("rain_late_season.csv")
 #%%
-#sites_late_season = pd.read_csv("gs_50_50_include_unbalance3_baseline.csv")
-#sites1 = pd.read_csv("early_sitewise_fitted_mar1.csv")
-#sites2 = pd.read_csv("late_sitewise_fitted_mar1.csv")
-#sites_late_season = pd.concat([sites1,sites2])
+sites_late_season = pd.read_csv("gs_50_50_mar1.csv")
+#sites_late_season.gpp = 1*sites_late_season.gpp_nt #+ sites_late_season.gpp)/2
 
+sites_late_season.gpp = (sites_late_season.gpp_nt + sites_late_season.gpp)/2
+#sites_late_season = sites_late_season.loc[sites_late_season.rain_prev==0].copy()
+#sites_old = pd.read_csv("plain_fitted_mar1.csv")
 
-sites_late_season = pd.read_csv("plain_fitted_mar1.csv")
+#sites_late_season = pd.merge(sites_late_season,sites_old[["SITE_ID","date","sinterp_mean2"]],how="inner",on=["SITE_ID","date"])
+#sites_both = pd.merge(sites_late_season,sites_old,how="inner",on=["SITE_ID","date"])
 
-#sites_lai = pd.read_csv("grad_nores_fitted_feb28_lai.csv")
-#sites_late_season["LAIint_rel"] = 1*sites_lai.LAIint_rel
-#sites_lai = None
-
+#sites_late_season = sites_late_season.loc[sites_late_season.SITE_ID.isin(pd.unique(sites_old.SITE_ID))]
+#%%
+sites_late_season = pd.merge(sites_late_season,bif_forest,on="SITE_ID",how='left')
+#%%
 sites_late_season["res_cond"] = 0
 
 
@@ -104,106 +106,13 @@ biome_list = ["Evergreen needleleaf forest", "Mixed forest", "Deciduous broadlea
 sites_late_season["combined_biome"] = [simple_biomes[x] for x in sites_late_season["IGBP"]]
 
 #%%
-#sites_late_season = sites_late_season.loc[sites_late_season.gpp_unc < 0.25]
-#sites_late_season = sites_late_season.loc[sites_late_season.doy >= sites_late_season.summer_peak]
-#sites_late_season["kgpp"] = sites_late_season.gppmax_B / sites_late_season.slope_B
-#sites_late_season["gpp_pred"] = 1*sites_late_season["gpp_pred_B"]
-#sites_late_season["gppmax"] = 1*sites_late_season["gppmax_B"]
-#sites_late_season = sites_late_season.loc[sites_late_season.drel_both >= -0.5]
-#(sites_late_season["gpp_qc"] + sites_late_season["gpp_nt"])/2 
-#sites_late_season = sites_late_season.loc[np.abs(sites_late_season["drel_both"])  < 0.67]
 
 sites_late_season = sites_late_season.loc[sites_late_season["gpp"]  > 0]
 #sites_late_season = sites_late_season.loc[sites_late_season["par"]  > 150]
-
-#site_max = sites_late_season.groupby("SITE_ID").max(numeric_only=True).reset_index()
-#site_min = sites_late_season.groupby("SITE_ID").min(numeric_only=True).reset_index()
-#sites_late_season = pd.merge(sites_late_season,bif_forest,on="SITE_ID",how='left')
 #%%
-sites_late_season["gpp_err2"] = (sites_late_season.gpp - sites_late_season.gpp_pred)**2
-#sites_late_season["gppA_err2"] = (sites_late_season.gpp - sites_late_season.gpp_pred_A)**2
-
-site_var = sites_late_season.groupby("SITE_ID").var(numeric_only=True).reset_index()
-site_newmean = sites_late_season.groupby("SITE_ID").mean(numeric_only=True).reset_index()
-site_first = sites_late_season.groupby("SITE_ID").first().reset_index()
-
-site_gpp_r2 = 1 - site_newmean.gpp_err2 / site_var.gpp
-#site_gppA_r2 = 1 - site_newmean.gppA_err2 / site_var.gpp
-
-#%%
-site_first["gppR2"] = site_gpp_r2
-#site_first["gppR2_A"] = site_gppA_r2
-
-site_first = site_first.sort_values("gppR2")#.reset_index()
-site_first["gpp_rank"] = np.arange(len(site_first))
-#%%
-plt.figure()
-plt.plot(site_first.gpp_rank,site_first.gppR2,'o')
-
-plt.ylim(-0.2,1)
-plt.xlabel("Rank",fontsize=24)
-plt.ylabel(r"$R^2$ of GPP",fontsize=24)
-#%%
-# site_range = np.arange(len(site_first))
-# plt.plot(np.sort(site_first.gppR2),site_range,'o')
-# plt.plot(np.sort(site_first.gppR2_A),site_range,'o')
-
-# plt.xlim(-0.2,1)
-# plt.ylabel("Rank",fontsize=24)
-# plt.xlabel(r"$R^2$ of GPP",fontsize=24)
-#%%
-fig,ax = plt.subplots(1,1,figsize=(15,6))
-
-points_handles = []
-for i in range(len(biome_list)):
-    subI = site_first.loc[site_first.combined_biome==biome_list[i]]
-    if len(subI) > 0:
-        pointI, = ax.plot(subI.gpp_rank,subI.gppR2,'o',alpha=0.75,markersize=10,color=mpl.colormaps["tab10"](i+2),label=biome_list[i])
-        points_handles.append(pointI)
-
-#ax.set_xlim(0,250)
-ax.set_ylim(-0.2,1)
-ax.set_xlabel("Rank",fontsize=24)
-ax.set_ylabel(r"$R^2$ of GPP",fontsize=24)
-
-fig.legend(handles=points_handles,loc="upper center",bbox_to_anchor=(0.5,0.03),ncols=2 )
-#ax.vlines(df_meta.ddrain_mean,df_meta.tau_75,df_meta.tau_25,color="k")
-
-#%%
-xarr = np.linspace(-1,1,500)
-plt.figure()
-plt.plot(sites_late_season.drel_both, sites_late_season.gpp/sites_late_season.gpp_pred,'.',alpha=0.1); plt.ylim(0,3);
-#plt.plot(xarr,1.1 - xarr**2 / 3)
-#%%
-plt.figure(figsize=(8,8))
-plt.plot(sites_late_season["gpp_pred"], sites_late_season.gpp,'.',alpha=0.06);
-plt.plot([0,25],[0,25],'k')
-plt.xlim(0,17)
-plt.ylim(0,17)
-plt.xlabel("Modeled daily GPP $(\mu mol / m^2 /s)$")
-plt.ylabel("Eddy-covariance daily GPP $(\mu mol / m^2 /s)$")
-#%%
-# sites_late_season["gpp_err2"] = (sites_late_season.gpp - sites_late_season.gpp_pred)**2
-
-# site_var = sites_late_season.groupby("SITE_ID").var(numeric_only=True).reset_index()
-# site_newmean = sites_late_season.groupby("SITE_ID").mean(numeric_only=True).reset_index()
-# site_first = sites_late_season.groupby("SITE_ID").first().reset_index()
-
-# site_gpp_r2 = 1 - site_newmean.gpp_err2 / site_var.gpp
-
-#%%
-plt.figure()
-plt.plot(np.clip(sites_late_season["cond"]-sites_late_season["res_cond"],0,np.inf)/sites_late_season["kgpp"],
-         sites_late_season.gpp/sites_late_season.gppmax,'.',alpha=0.1);
-# plt.plot([0,25],[0,25],'k')
-xarr = np.linspace(0,10,500)
-plt.plot(xarr,1-np.exp(-xarr),'k--',linewidth=3)
-plt.xlim(0,7)
-plt.ylim(0,1.5)
-plt.xlabel("Normalized canopy conductance")
-plt.ylabel("Normalized GPP")
-
-# plt.ylabel("Eddy-covariance daily GPP $(\mu mol / m^2 /s)$")
+sites_late_season["drel_spring"] = -np.clip(sites_late_season["doy"] - sites_late_season["summer_peak"],-np.inf,0) / (sites_late_season["summer_peak"] - sites_late_season["summer_start"])
+sites_late_season["drel_fall"] = np.clip(sites_late_season["doy"] - sites_late_season["summer_peak"],0,np.inf) / (sites_late_season["summer_end"] - sites_late_season["summer_peak"])
+sites_late_season["drel_both"] = -sites_late_season["drel_spring"] + sites_late_season["drel_fall"]
 
 #%%
 xarr_par = np.linspace(0,550,500);
@@ -215,15 +124,37 @@ for site_id in pd.unique(sites_late_season.SITE_ID)[:]:#[forest_daily[x] for x i
     print(site_id)
     dfgpp = sites_late_season.loc[sites_late_season.SITE_ID==site_id].copy()
     dfgpp = dfgpp.loc[dfgpp.airt > 5]
-    #dfgpp = dfgpp.loc[dfgpp.cond < np.quantile(dfgpp.cond,0.95)]
+    #%%
+    cn = 1*dfgpp.cond
+    cn -= np.mean(cn)
+    dfgpp = dfgpp.loc[np.abs(cn) < 3*np.std(cn)]
+    
+    #%%
+    
+    lcn = np.log(dfgpp.cond)
+    lcn -= np.mean(lcn)
+    dfgpp = dfgpp.loc[np.abs(lcn) < 3*np.std(lcn)]
+    
+    #lcn = -(dfgpp.waterbal/100)**2
+    #lcn -= np.mean(lcn)
+    #dfgpp = dfgpp.loc[np.abs(lcn) < 3*np.std(lcn)]
+    #%%
+    wbs = np.sort(dfgpp.waterbal)
+    dsort = np.diff(wbs)
+    #%%
+    hlen = int(len(dsort)/2)
+    if np.max(dsort[:hlen]) > 5:
+        wcutoff = wbs[np.where(dsort[:hlen] > 5)[0][-1]]
+        dfgpp = dfgpp.loc[dfgpp.waterbal > wcutoff]
+    
     #dfgpp = dfgpp.loc[dfgpp.cond > np.quantile(dfgpp.cond,0.1)]
     #dfgpp = dfgpp.loc[dfgpp.LAIint_rel >= 0.75]
     #dfgpp = dfgpp.loc[dfgpp.drel_both >= 0]
-    dfgpp = dfgpp.loc[dfgpp.kgpp > 0].copy()
-    dfgpp = dfgpp.loc[np.isfinite(dfgpp.sinterp_mean2)].copy()
+    #dfgpp = dfgpp.loc[dfgpp.kgpp > 0].copy()
+    #dfgpp = dfgpp.loc[np.isfinite(dfgpp.sinterp_mean2)].copy()
     #%%
-    lo_soil = dfgpp.sinterp_mean2 < np.nanquantile(dfgpp.sinterp_anom2,0.25)
-    hi_soil = dfgpp.sinterp_mean2 > np.nanquantile(dfgpp.sinterp_anom2,0.75)
+    lo_soil = dfgpp.waterbal < np.nanquantile(dfgpp.waterbal,0.25)
+    hi_soil = dfgpp.waterbal > np.nanquantile(dfgpp.waterbal,0.75)
     dfgpp["cond_lo_smc"] = np.nanmedian(dfgpp.cond[lo_soil])
     dfgpp["cond_hi_smc"] = np.nanmedian(dfgpp.cond[hi_soil])
 
@@ -262,25 +193,43 @@ for site_id in pd.unique(sites_late_season.SITE_ID)[:]:#[forest_daily[x] for x i
     #%%
     slope0 = 100
     def gpp_opt(pars):
-        gppmax = pars[0] * (1 - pars[1]*fall_arr - pars[3]*spring_arr) * (par_arr)**pars[2]
+        gppmax = pars[0] * (1 - pars[1]*fall_arr - pars[3]*spring_arr) * (par_arr/275)**pars[2]
         gpp_pred = gppmax*(1-np.exp(-cond_arr*slope0/gppmax))
         return (gpp_pred-gpp_arr)#[np.isfinite(gpp_samp)]
     
     fit0 = np.array([gpp_allmax,0.1,0.5,0.1])
     gpp_optres = scipy.optimize.least_squares(gpp_opt,x0=fit0,method="lm")#,x_scale=np.abs(fit0))
-    #%%
-    pars = gpp_optres.x
-    gppmax = pars[0] * (1 - pars[1]*fall_arr - pars[3]*spring_arr) * (par_arr)**pars[2]
-    gpp_pred = gppmax*(1-np.exp(-cond_arr*slope0/gppmax))
     
+    pars = gpp_optres.x
+    gppmax = pars[0] * (1 - pars[1]*fall_arr - pars[3]*spring_arr) * (par_arr/275)**pars[2]
+    gpp_pred = gppmax*(1-np.exp(-cond_arr*slope0/gppmax))
+    #%%
+    # slope0 = 100
+    # def gpp_opt(pars):
+    #     gppmax = pars[0] * (par_arr/275)**pars[1]
+    #     gpp_pred = gppmax*(1-np.exp(-cond_arr*slope0/gppmax))
+    #     return (gpp_pred-gpp_arr)#[np.isfinite(gpp_samp)]
+    
+    # fit0 = np.array([gpp_allmax,0.5])
+    # gpp_optres = scipy.optimize.least_squares(gpp_opt,x0=fit0,method="lm")#,x_scale=np.abs(fit0))
+    
+    # pars = gpp_optres.x
+    # gppmax = pars[0] * (par_arr/275)**pars[1]
+    # gpp_pred = gppmax*(1-np.exp(-cond_arr*slope0/gppmax))
+    
+    #%%
+    if pars[0] < 0:
+        continue
+    if np.min(gppmax) < 0:
+        continue
     #%%
     dfgpp["gppmax"] = gppmax
     dfgpp["kgpp"] = gppmax/slope0
     dfgpp["gpp_pred"] = gppmax*(1-np.exp(-cond_arr/gppmax*slope0))
 #%% #%%
-    #dfgpp["gppR2"] = 1- np.mean((dfgpp.gpp-dfgpp.gpp_pred)**2)/np.var(dfgpp.gpp)
+    dfgpp["gppR2"] = 1- np.mean((dfgpp.gpp-dfgpp.gpp_pred)**2)/np.var(dfgpp.gpp)
 
-    dfgpp["gppR2"] = np.corrcoef(dfgpp.gpp_pred, dfgpp.gpp)[0,1]**2
+    #dfgpp["gppR2"] = np.corrcoef(dfgpp.gpp_pred, dfgpp.gpp)[0,1]**2
     dfgpp["gppR2_no_cond"] = np.corrcoef(dfgpp.gppmax, dfgpp.gpp)[0,1]**2
     dfgpp["gppR2_only_cond"] = np.corrcoef(dfgpp.cond, dfgpp.gpp)[0,1]**2
 #%%
@@ -321,37 +270,21 @@ for site_id in pd.unique(sites_late_season.SITE_ID)[:]:#[forest_daily[x] for x i
     
     #doymid = (dfgpp.summer_end.iloc[0] + dfgpp.summer_start.iloc[0])/2
     #dfgpp = dfgpp.loc[dfgpp.doy < doymid]
+    #dfgpp = dfgpp.loc[dfgpp.waterbal > -500]
+    #dfgpp = dfgpp.loc[dfgpp.waterbal < 0]
+
     #%%
     if len(dfgpp) < 10:
          continue
 #%%
     dfi = fit_tau_res(dfgpp.copy())
-    #dfi = fit_tau_res_assume_max(dfgpp.copy(),2)
+    #dfi = fit_tau_res_assume_max(dfgpp.copy(),5)
     #dfi = fit_tau_res_width(dfgpp.copy())
 
     dfi["max_limitation"] = np.min(dfi.et_tau/dfi.et_null)
     dfi["soil_max"] = np.max(dfi.waterbal)
     dfi["soil_min"] = np.min(dfi.waterbal)
     
-    #dfi = fit_tau_res_width(dfgpp.copy())
-    
-    # if dfi2.etr2_smc.iloc[0] > dfi.etr2_smc.iloc[0]:
-    #     dfi = dfi2.copy()
-    #%%
-    # mysel = (dfi.pred_cond < dfi.gmax)*(dfi.pred_cond > dfi.res_cond)
-    # dfi["etr2_limited_null"] = np.corrcoef(dfi.et_null[mysel],dfi.ET[mysel])[0,1]**2
-    # dfi["etr2_limited_smc"] = np.corrcoef(dfi.et_tau[mysel],dfi.ET[mysel])[0,1]**2
-    # dfi["n_limited"] = np.sum(mysel > 0)
-    #%%
-    #dfi = fit_tau_res_assume_max(dfgpp.copy(),0.25)#.copy()
-    #dfi = fit_tau_res_width(dfgpp.copy())#.copy()
-
-    #%%
-    # tau_base = dfi.tau.iloc[0]
-    # newr2 = []
-    # for tmult in mult_array:
-    #     dfi2 = fit_assume_tau_res(dfgpp.copy(),tau_base*tmult)
-    #     newr2.append(dfi2.etr2_smc2.iloc[0])
 #%%
     dfi["npoints"] = len(dfi)
     all_results.append(dfi)
@@ -375,6 +308,25 @@ df1["Aridity"] = df1.mean_netrad / (df1.map_data / (18/1000 * 60*60*24) * 44200)
 #f_stat = (df1.etr2_smc-df1.etr2_null)/(1-df1.etr2_smc)*(df1.site_count-2)
 #scipy.stats.f.cdf(f_stat,1,df1.site_count-2)
 #%%
+df_meta3 = df1.sort_values("gppR2")
+df_meta3["gpp_rank"] = np.arange(len(df_meta3))
+#%%
+fig,ax = plt.subplots(1,1,figsize=(15,6))
+
+points_handles = []
+for i in range(len(biome_list)):
+    subI = df_meta3.loc[df_meta3.combined_biome==biome_list[i]]
+    if len(subI) > 0:
+        pointI, = ax.plot(subI.gpp_rank,subI.gppR2,'o',alpha=0.75,markersize=10,color=mpl.colormaps["tab10"](i+2),label=biome_list[i])
+        points_handles.append(pointI)
+
+#ax.set_xlim(0,250)
+ax.set_ylim(0,1)
+ax.set_xlabel("Rank",fontsize=24)
+ax.set_ylabel(r"$R^2$ of GPP",fontsize=24)
+#ax.axhline(0,color='k')
+
+fig.legend(handles=points_handles,loc="upper center",bbox_to_anchor=(0.5,0.03),ncols=2 )
 
 #%%
 
@@ -431,10 +383,13 @@ def get_lens2(x,c):
     return day_diff
 
 #%%
-rain_data = pd.read_csv("rain_50_50_include_unbalance3.csv")
+rain_data = pd.read_csv("rain_50_50_mar1.csv")
 
 rain_sites = pd.unique(df1.SITE_ID)
 ddl_rain = []
+ddl_rain2 = []
+ddl_rain10 = []
+
 rain_gs_mean = []
 rain_pos_mean = []
 for x in rain_sites:
@@ -450,22 +405,32 @@ for x in rain_sites:
     #rain_pos_mean.append(site_rain_posmean)
 
     years_max = []
+    years_mean = []
+    years_mean10 = []
+
     for y in np.unique(year_list):
         #cutoff = df_meta.map_data.loc[df_meta.SITE_ID==x].iloc[0]*4
         z = 1*rain_allyear[year_list==y]
         z[-1] = np.inf
        # years_max.append(np.max(get_lens(z,np.mean(site_rain_pos))))
-        years_max.append(np.max(get_lens(z,10)))
+        ly = get_lens(z,10)
+        years_max.append(np.max(ly))
+        years_mean.append(np.mean(ly[ly >= 2]))
+        years_mean10.append(np.mean(ly[ly >= 10]))
 
         #years_max.append(np.max(interval_len(z,site_rain_mean/4)))
 
 
     ddl_rain.append(np.mean(years_max))
+    ddl_rain2.append(np.mean(years_mean))
+    ddl_rain10.append(np.mean(years_mean10))
+
 #%%
 rain_site_tab = pd.DataFrame({"SITE_ID":rain_sites,
                               "ddrain_mean":ddl_rain,
-                              "gsrain_mean":rain_gs_mean})
-                              #"gsrain_pos_mean":rain_pos_mean})
+                              "gsrain_mean":rain_gs_mean,
+                              "ddrain_2mean":ddl_rain2,
+                              "ddrain_10mean":ddl_rain10})
 df1 = pd.merge(df1,rain_site_tab,on="SITE_ID",how="left")
 
 #%%
@@ -542,7 +507,7 @@ fig,ax = plt.subplots(1,1,figsize=(10,8))
 lmax = 500
 
 line1, = ax.plot([0,lmax],[0,lmax],"k",label="1:1 line")
-line2, = ax.plot([0,lmax],np.array([0,lmax])*rainmod.params[1]+rainmod.params[0],"b--",label="Regression line\n($R^2$ = 0.45)")
+line2, = ax.plot([0,lmax],np.array([0,lmax])*rainmod.params[1]+rainmod.params[0],"b--",label="Regression line\n($R^2$ = 0.65)")
 #plt.plot([0,150],np.array([0,150])*reg0.params[0],"b--",label="Regression line\n($R^2$ = 0.39)")
 #leg1 = ax.legend(loc="upper left")
 leg1 = ax.legend(loc="lower right")
@@ -556,7 +521,7 @@ for i in range(len(biome_list)):
 
 ax.set_xlim(0,200)
 ax.set_ylim(0,200)
-ax.set_xlabel("Average $D_{max}$ (days)",fontsize=24)
+ax.set_xlabel("Annual-mean $D_{max}$ (days)",fontsize=24)
 ax.set_ylabel(r"$\tau$ (days)",fontsize=24)
 
 fig.legend(handles=points_handles,loc="upper center",bbox_to_anchor=(0.5,0.03),ncols=2 )
@@ -566,61 +531,37 @@ fig.legend(handles=points_handles,loc="upper center",bbox_to_anchor=(0.5,0.03),n
 
 #plt.savefig("C:/Users/nholtzma/OneDrive - Stanford/agu 2022/plots for poster/rain_scatter4.svg",bbox_inches="tight")
 #%%
+fig,ax = plt.subplots(1,1,figsize=(10,8))
+
+# lmax = 500
+
+# line1, = ax.plot([0,lmax],[0,lmax],"k",label="1:1 line")
+# line2, = ax.plot([0,lmax],np.array([0,lmax])*rainmod.params[1]+rainmod.params[0],"b--",label="Regression line\n($R^2$ = 0.65)")
+# #plt.plot([0,150],np.array([0,150])*reg0.params[0],"b--",label="Regression line\n($R^2$ = 0.39)")
+# #leg1 = ax.legend(loc="upper left")
+# leg1 = ax.legend(loc="lower right")
+
+points_handles = []
+for i in range(len(biome_list)):
+    subI = df_meta.loc[df_meta.combined_biome==biome_list[i]]
+    if len(subI) > 0:
+        pointI, = ax.plot(subI.ddrain_2mean,subI.tau,'o',alpha=0.75,markersize=15,color=mpl.colormaps["tab10"](i+2),label=biome_list[i])
+        points_handles.append(pointI)
+
+#ax.set_xlim(0,200)
+ax.set_ylim(0,200)
+ax.set_xlabel("Aridity index",fontsize=24)
+ax.set_ylabel(r"$\tau$ (days)",fontsize=24)
+
+fig.legend(handles=points_handles,loc="upper center",bbox_to_anchor=(0.5,0.03),ncols=2 )
+
+
+
+#%%
 yscaler = np.sqrt(zsoil_mol)
 molm2_to_mm = 18/1000
 s2day = 60*60*24
 
-site_id = "US-Me4"
-df2 = all_results.loc[all_results.SITE_ID==site_id]
-
-plt.figure()
-plt.plot((df2.waterbal/1000)*zsoil_mol*molm2_to_mm,(df2.g_adj*yscaler*np.sqrt(molm2_to_mm))**2*s2day,'ro',alpha=0.5,label=r"US-Me4, $\tau$ = 166 days")
-xarr = np.linspace(0,1000,500)
-#tau_overall = np.median(df2.tau)
-tauI = df2.tau.iloc[0]
-print(tauI)
-#width=df2.width.iloc[0]
-plt.plot(xarr+df2.smin.iloc[0]*zsoil_mol*molm2_to_mm,(np.clip(xarr,0,width)/tauI/(60*60*24))*s2day,'r',linewidth=3)
-
-# tau2 = 40.6
-# smin2 = -0.5
-# plt.plot(xarr+smin2*zsoil_mol*molm2_to_mm,(np.clip(xarr,0,width)/tauI/(60*60*24)),'g',linewidth=3)
-
-
-site_id = "DE-Obe"
-
-df2 = all_results.loc[all_results.SITE_ID==site_id]
-
-plt.plot((df2.waterbal/1000)*zsoil_mol*molm2_to_mm,(df2.g_adj*yscaler*np.sqrt(molm2_to_mm))**2*s2day,'bo',alpha=0.5,label=r"DE-Obe, $\tau$ = 41 days")
-xarr = np.linspace(0,1000,500)
-
-#tau_overall = np.median(df2.tau)
-tauI = df2.tau.iloc[0]
-print(tauI)
-#width=df2.width.iloc[0]
-plt.plot(xarr+df2.smin.iloc[0]*zsoil_mol*molm2_to_mm,(np.clip(xarr,0,width)/tauI/(60*60*24))*s2day,'b',linewidth=3)
-
-# site_id = "AU-Wom"
-
-# df2 = all_results.loc[all_results.SITE_ID==site_id]
-
-# plt.plot((df2.waterbal/1000)*zsoil_mol*molm2_to_mm,(df2.g_adj*yscaler*np.sqrt(molm2_to_mm))**2*s2day,'ko',alpha=0.5,label=r"US-UMB, not detectably water limited")
-# xarr = np.linspace(0,1000,500)
-
-# #tau_overall = np.median(df2.tau)
-# tauI = df2.tau.iloc[0]
-# print(tauI)
-# #width=df2.width.iloc[0]
-# #plt.plot(xarr+df2.smin.iloc[0]*zsoil_mol*molm2_to_mm,(np.clip(xarr,0,width)/tauI/(60*60*24))*s2day,'k',linewidth=3)
-
-plt.xlabel("$Z_{soil}*s$ (mm)",fontsize=30)
-#plt.ylabel("Adjusted conductance $(s^{0.5})$")
-plt.ylabel("$g_{adj}$ (mm/day)",fontsize=30)
-
-plt.legend(fontsize=24,framealpha=1)
-
-plt.xlim(0,400)
-plt.ylim(0,3)
 #%%
 import cartopy.crs as ccrs
 import cartopy.feature as cf
@@ -649,20 +590,6 @@ df_meta2 = df_meta2.loc[df_meta2.gppR2-df_meta2.gppR2_only_cond > 0.0]
 df_meta2 = df_meta2.loc[df_meta2.DOM_DIST_MGMT != "Fire"]
 #df_meta2 = df_meta2.loc[df_meta2.DOM_DIST_MGMT != "Agriculture"]
 #df_meta2 = df_meta2.loc[df_meta2.DOM_DIST_MGMT != "Grazing"]
-
-#%%
-plt.figure(figsize=(8,8))
-plt.plot(df_meta2.etr2_null,df_meta2.etr2_smc,'o')
-plt.plot([-0.25,1],[-0.25,1],'k--',label="y = x")
-plt.plot([-0.25,1],[-0.25+0.05,1+0.05],'r--',label="y = x + 0.05")
-plt.axvline(0,color="k")
-plt.axhline(0,color="k")
-plt.ylim(-0.1,1)
-plt.xlim(-0.5,1)
-plt.xlabel("Model without soil moisture")
-plt.ylabel("Model including soil moisture")
-plt.title("$R^2$ of ET")
-plt.legend(loc="lower right",framealpha=1)
 #%%
 
 fig,ax = plt.subplots(1,1,figsize=(10,8))
@@ -682,7 +609,7 @@ ax.set_ylabel("Average annual precip. (cm)",fontsize=24)
 fig.legend(handles=points_handles,loc="upper center",bbox_to_anchor=(0.5,0.03),ncols=2 )
 #ax.vlines(df_meta.ddrain_mean,df_meta.tau_75,df_meta.tau_25,color="k")
 #%%
-xarr = np.linspace(0,1e6,500)
+xarr = np.linspace(0,900,500)
 
 site_id = "US-Me4"
 df2 = all_results.loc[all_results.SITE_ID==site_id].copy()
@@ -695,10 +622,11 @@ tauI = df2.tau.iloc[0]*60*60*24
 plt.figure()
 var_combo = 2*zsoil_mol*(df2.waterbal/1000-1*df2.smin)/(df2.vpd/100)*df2.kgpp
 
-plt.plot(var_combo,df2.cond-df2.res_cond,'ro',alpha=0.5,label=r"US-Me4, $\tau$ = 170 days")
+plt.plot(np.sqrt(var_combo),df2.cond-df2.res_cond,'ro',alpha=0.5,label=r"US-Me4, $\tau$ = 170 days")
 print(df2.tau.iloc[0])
 print(df2.smin.iloc[0])
-plt.plot(xarr,np.sqrt(xarr/tauI),'r',linewidth=3)
+gmax_i = df2.gmax.iloc[0]
+plt.plot(xarr,np.clip(xarr/np.sqrt(tauI),0,gmax_i),'r',linewidth=3)
 
 site_id = "DE-Obe"
 df2 = all_results.loc[all_results.SITE_ID==site_id].copy()#.iloc[300:]
@@ -709,18 +637,20 @@ df2 = all_results.loc[all_results.SITE_ID==site_id].copy()#.iloc[300:]
 tauI = df2.tau.iloc[0]*60*60*24
 #tauI = 40*60*60*24
 var_combo = 2*zsoil_mol*(df2.waterbal/1000-1*df2.smin)/(df2.vpd/100)*df2.kgpp
-plt.plot(var_combo,df2.cond-df2.res_cond,'bo',alpha=0.5,label=r"DE-Obe, $\tau$ = 64 days")
+plt.plot(np.sqrt(var_combo),df2.cond-df2.res_cond,'bo',alpha=0.5,label=r"DE-Obe, $\tau$ = 23 days")
 print(df2.tau.iloc[0])
 print(df2.smin.iloc[0])
-plt.plot(xarr,np.sqrt(xarr/tauI),'b',linewidth=3)
+gmax_i = df2.gmax.iloc[0]
+plt.plot(xarr,np.clip(xarr/np.sqrt(tauI),0,gmax_i),'b',linewidth=3)
 
-plt.xlim(0,1e6)
-plt.ylim(0,0.6)
+#plt.xlim(0,1e6)
+plt.ylim(0,0.65)
 
 plt.legend(framealpha=1)
 
-plt.xlabel(r"$2g_A S/VPD$ $(mol/m^2/s)^2$",fontsize=24)
+plt.xlabel(r"$(2g_A (S-S_0)/VPD)^{0.5}$ $(mol/m^2/s)$",fontsize=24)
 plt.ylabel("g from eddy covariance\n$(mol/m^2/s)$",fontsize=24)
+#%%
 
 #%%
 df_meta3 = df_meta.sort_values("etr2_smc")
@@ -743,55 +673,50 @@ ax.set_ylabel(r"$R^2$ of ET",fontsize=24)
 fig.legend(handles=points_handles,loc="upper center",bbox_to_anchor=(0.5,0.03),ncols=2 )
 #ax.vlines(df_meta.ddrain_mean,df_meta.tau_75,df_meta.tau_25,color="k")
 #%%
-# df_meta3 = df_meta.sort_values("gr2_smc")
-# df_meta3["g_rank"] = np.arange(len(df_meta3))
-# #%%
-# fig,ax = plt.subplots(1,1,figsize=(15,6))
+df_meta3 = df_meta.sort_values("gr2_smc")
+df_meta3["g_rank"] = np.arange(len(df_meta3))
+#%%
+fig,ax = plt.subplots(1,1,figsize=(15,6))
 
-# points_handles = []
-# for i in range(len(biome_list)):
-#     subI = df_meta3.loc[df_meta3.combined_biome==biome_list[i]]
-#     if len(subI) > 0:
-#         pointI, = ax.plot(subI.g_rank,subI.gr2_smc,'o',alpha=0.75,markersize=10,color=mpl.colormaps["tab10"](i+2),label=biome_list[i])
-#         points_handles.append(pointI)
+points_handles = []
+for i in range(len(biome_list)):
+    subI = df_meta3.loc[df_meta3.combined_biome==biome_list[i]]
+    if len(subI) > 0:
+        pointI, = ax.plot(subI.g_rank,subI.gr2_smc,'o',alpha=0.75,markersize=10,color=mpl.colormaps["tab10"](i+2),label=biome_list[i])
+        points_handles.append(pointI)
 
-# #ax.set_xlim(0,250)
-# ax.set_ylim(-1,1)
-# ax.set_xlabel("Rank",fontsize=24)
-# ax.set_ylabel(r"$R^2$ of g",fontsize=24)
-# ax.axhline(0,color='k')
+#ax.set_xlim(0,250)
+ax.set_ylim(0,1)
+ax.set_xlabel("Rank",fontsize=24)
+ax.set_ylabel(r"$R^2$ of g",fontsize=24)
+#ax.axhline(0,color='k')
 
-# fig.legend(handles=points_handles,loc="upper center",bbox_to_anchor=(0.5,0.03),ncols=2 )
-# #ax.vlines(df_meta.ddrain_mean,df_meta.tau_75,df_meta.tau_25,color="k")
+fig.legend(handles=points_handles,loc="upper center",bbox_to_anchor=(0.5,0.03),ncols=2 )
+#ax.vlines(df_meta.ddrain_mean,df_meta.tau_75,df_meta.tau_25,color="k")
 #%%
 plt.figure(figsize= (10,10))
 plt.subplot(2,1,1)
 plt.plot(all_results.drel_both, np.log(all_results.gpp/all_results.gpp_pred),'.',alpha=0.1); 
 plt.ylim(-1,1);
+plt.ylabel("log GPP error")
 plt.subplot(2,1,2)
 plt.plot(all_results.drel_both, np.log(all_results.ET/all_results.et_tau),'.',alpha=0.1); 
 plt.ylim(-1,1);
-#%%
-#%%
-plt.figure(figsize= (10,10))
-plt.subplot(2,1,1)
-plt.plot(all_results.LAIint_rel, np.log(all_results.gpp/all_results.gpp_pred),'.',alpha=0.1); 
-plt.xlim(0.5,1)
-plt.ylim(-1,1);
-plt.subplot(2,1,2)
-plt.plot(all_results.LAIint_rel, np.log(all_results.ET/all_results.et_tau),'.',alpha=0.1); 
-plt.ylim(-1,1);
-plt.xlim(0.5,1)
-#%%
+plt.ylabel("log ET error")
+
+plt.xlabel("Day relative to growing season peak")
 #%%
 plt.figure()
 plt.plot(np.log(all_results.gpp/all_results.gpp_pred), np.log(all_results.ET/all_results.et_tau),'.',alpha=0.1); 
 plt.ylim(-1,1)
 plt.xlim(-1,1)
+plt.xlabel("log GPP error")
+plt.ylabel("log ET error")
+
 #%%
 
-plt.figure()
-plt.plot(all_results.gpp-all_results.gpp_pred, all_results.ET-all_results.et_tau,'.',alpha=0.1); 
+#plt.figure()
+#plt.plot(all_results.gpp-all_results.gpp_pred, all_results.ET-all_results.et_tau,'.',alpha=0.1); 
 #%%
 # plt.ylim(-1,1)
 # plt.xlim(-1,1)

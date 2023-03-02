@@ -167,7 +167,7 @@ def prepare_df(fname, site_id, bif_forest):
     
     le_25 = np.array(df['LE_CORR_25']) #/ 44200 
     le_75 = np.array(df['LE_CORR_75']) #/ 44200 
-    #et_summer[np.isnan(le_25*le_75)] = np.nan
+    et_summer[np.isnan(le_25*le_75)] = np.nan
     
     
     myrn = np.array(meancols(df,"NETRAD"))
@@ -206,9 +206,11 @@ def prepare_df(fname, site_id, bif_forest):
         return "Not enough data"
         
     #%%
+    df['etqc'] = et_summer
+    
     my_clim = df.groupby("doy_new").mean(numeric_only=True)
     
-    gpp_clim = np.array(2*my_clim["GPP_DT_VUT_REF"] + 0*my_clim["GPP_NT_VUT_REF"])/2
+    gpp_clim = np.array(1*my_clim["GPP_DT_VUT_REF"] + 1*my_clim["GPP_NT_VUT_REF"])/2
     
     
     gpp_clim_std = gpp_clim - np.nanmin(gpp_clim)
@@ -248,30 +250,37 @@ def prepare_df(fname, site_id, bif_forest):
         plt.plot(my_clim.LAIclim,'k')
 
     #%%
-    p_in_clim = fill_na(np.array(my_clim.P_F))
-    et_out_clim =fill_na(np.array(my_clim["LE_F_MDS"] / 44200 * 18/1000 * 60*60*24))
+    #p_in_clim = fill_na(np.array(my_clim.P_F))
+#    et_out_clim =fill_na(np.array(my_clim["LE_F_MDS"] / 44200 * 18/1000 * 60*60*24))
+    #et_out_clim =fill_na(np.array(my_clim["etqc"] * 18/1000 * 60*60*24))
     
-    turn_point = np.argmax(np.cumsum(p_in_clim - et_out_clim) )
+    #turn_point = np.argmax(np.cumsum(p_in_clim - et_out_clim) )
     
     my_clim = my_clim.reset_index()
     my_clim["P_F_c"] = fill_na(np.array(my_clim.P_F))
-    my_clim["LE_all_c"] = fill_na(np.array(my_clim.LE_F_MDS))
+#    my_clim["LE_all_c"] = fill_na(np.array(my_clim.LE_F_MDS))
+    my_clim["LE_all_c"] = fill_na(np.array(my_clim.etqc))
+
+
     dfm = pd.merge(df,my_clim[["doy_new","P_F_c","LE_all_c"]],on="doy_new",how="left")
         
     
     p_in = fill_na2(np.array(df.P_F),np.array(dfm.P_F_c))
-    et_out = fill_na2(et_summer * 18/1000 * 60*60*24,np.array(dfm["LE_all_c"] / 44200 * 18/1000 * 60*60*24))
+    et_out = fill_na2(et_summer * 18/1000 * 60*60*24,np.array(dfm["LE_all_c"] * 18/1000 * 60*60*24))
     doy_summer = np.array(df["doy_new"])
     #%%
-    # if np.mean(et_out) < np.mean(p_in):
-    #     #inflow = 0
-    #     yeardf = df.groupby("year").sum(numeric_only=True).reset_index()
-    #     yearET = yeardf.LE_F_MDS / 44200 * (18/1000) * (60*60*24)
-    #     bad_year = yeardf.loc[yeardf.P_F < yearET].year
+    #df["et_wqc"] = et_summer
+    #yearcount = df.groupby("year").count().reset_index()
+
+    #if np.mean(et_out) < np.mean(p_in):
+        #inflow = 0
+        # yeardf = df.groupby("year").sum(numeric_only=True).reset_index()
+        # yearET = yeardf.LE_F_MDS / 44200 * (18/1000) * (60*60*24)
+        # bad_year = yeardf.loc[yeardf.P_F < yearET].year
         
-    #     to_replace = df.year.isin(bad_year)
-    #     p_in[to_replace] = dfm.P_F_c[to_replace]
-    #     et_out[to_replace] = dfm.LE_all_c[to_replace] / 44200 * 18/1000 * 60*60*24
+        # to_replace = df.year.isin(bad_year)
+        # p_in[to_replace] = dfm.P_F_c[to_replace]
+        # et_out[to_replace] = dfm.LE_all_c[to_replace] / 44200 * 18/1000 * 60*60*24
     
     # else:
     #     inflow = np.mean(et_out) - np.mean(p_in)
@@ -285,7 +294,7 @@ def prepare_df(fname, site_id, bif_forest):
     waterbal_raw = np.zeros(len(doy_summer))
     for dayi in range(len(p_in)):
         waterbal_raw[dayi] = wbi
-        wbi += p_in[dayi] - et_out[dayi] #+ inflow
+        wbi += p_in[dayi] - et_out[dayi] #- 1.8
         wbi = min(0,wbi)
         #if dayi == opposite_peak:
         #    wbi = 0
@@ -294,8 +303,24 @@ def prepare_df(fname, site_id, bif_forest):
     
     #%%
     waterbal_corr[np.isnan(et_summer)] = np.nan
-    
-    
+    #%%
+    doynew_arr = np.array(df.doy_new)
+    #year_arr = np.array(df.year)
+
+    mcount = 0
+    for di in range(len(df)):
+        if doynew_arr[di] == 1:
+            mcount = 0
+        if np.isnan(waterbal_corr[di]):
+            mcount += 1
+        if mcount > 60:
+            waterbal_corr[di] = np.nan
+    #%%
+    df["waterbal"] = waterbal_corr
+    #ymin = df.groupby("year").min().reset_index().rename(columns={"waterbal":"wb_ymin"})
+    #ymax = df.groupby("year").max().reset_index().rename(columns={"waterbal":"wb_ymin"})
+
+    #ymin
     #%%
     is_summer = (doy_summer >= summer_start)*(doy_summer <= summer_end)
     is_late_summer = is_summer #(doy_summer >= topday)*(doy_summer <= summer_end)
@@ -516,7 +541,7 @@ for fname in forest_daily:#[forest_daily[x] for x in [70,76]]:
     all_results.append(df_to_fit)
     #%%
 all_results = pd.concat(all_results)
-all_results.to_csv("gs_50_50_mar1.csv")
+all_results.to_csv("gs_50_50_mar1b.csv")
 #%%
 sites = []
 years = []
@@ -530,4 +555,4 @@ for x in rain_dict.keys():
 raindf = pd.DataFrame({"SITE_ID":np.concatenate(sites),
                       "year":np.concatenate(years),
                       "rain_mm":np.concatenate(rains)})
-raindf.to_csv("rain_50_50_mar1.csv")
+raindf.to_csv("rain_50_50_mar1b.csv")

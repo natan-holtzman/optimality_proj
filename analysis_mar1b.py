@@ -73,7 +73,7 @@ site_result = {}
 #sites_late_season = pd.read_csv("late_summer_data.csv")
 #rain_data = pd.read_csv("rain_late_season.csv")
 #%%
-sites_late_season = pd.read_csv("gs_50_50_mar1.csv")
+sites_late_season = pd.read_csv("gs_50_50_mar1b.csv")
 #sites_late_season.gpp = 1*sites_late_season.gpp_nt #+ sites_late_season.gpp)/2
 
 sites_late_season.gpp = (sites_late_season.gpp_nt + sites_late_season.gpp)/2
@@ -134,18 +134,25 @@ for site_id in pd.unique(sites_late_season.SITE_ID)[:]:#[forest_daily[x] for x i
     lcn = np.log(dfgpp.cond)
     lcn -= np.mean(lcn)
     dfgpp = dfgpp.loc[np.abs(lcn) < 3*np.std(lcn)]
-    
+    #%%
+    #ymin = dfgpp.groupby("year").min().waterbal
     #lcn = -(dfgpp.waterbal/100)**2
     #lcn -= np.mean(lcn)
     #dfgpp = dfgpp.loc[np.abs(lcn) < 3*np.std(lcn)]
     #%%
-    wbs = np.sort(dfgpp.waterbal)
-    dsort = np.diff(wbs)
+    #ymin = dfgpp.groupby("year").min().reset_index()
+    #ymax = dfgpp.groupby("year").max().reset_index()
+    
+    
+    
     #%%
-    hlen = int(len(dsort)/2)
-    if np.max(dsort[:hlen]) > 5:
-        wcutoff = wbs[np.where(dsort[:hlen] > 5)[0][-1]]
-        dfgpp = dfgpp.loc[dfgpp.waterbal > wcutoff]
+    # wbs = np.sort(dfgpp.waterbal)
+    # dsort = np.diff(wbs)
+    # #%%
+    # hlen = int(len(dsort)/2)
+    # if np.max(dsort[:hlen]) > 5:
+    #     wcutoff = wbs[np.where(dsort[:hlen] > 5)[0][-1]]
+    #     dfgpp = dfgpp.loc[dfgpp.waterbal > wcutoff]
     
     #dfgpp = dfgpp.loc[dfgpp.cond > np.quantile(dfgpp.cond,0.1)]
     #dfgpp = dfgpp.loc[dfgpp.LAIint_rel >= 0.75]
@@ -383,7 +390,7 @@ def get_lens2(x,c):
     return day_diff
 
 #%%
-rain_data = pd.read_csv("rain_50_50_mar1.csv")
+rain_data = pd.read_csv("rain_50_50_mar1b.csv")
 
 rain_sites = pd.unique(df1.SITE_ID)
 ddl_rain = []

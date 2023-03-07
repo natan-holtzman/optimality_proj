@@ -261,6 +261,151 @@ def fit_gpp_flex_slope_TP_season_res(df_in):
     return dfgpp
 #%%
 
+def fit_gpp_flex_slope_TP_res(df_in):
+    dfgpp = df_in.copy()
+    spring_arr = np.abs(np.array(dfgpp.drel_spring))
+    fall_arr = np.array(dfgpp.drel_fall)
+    # gm_arr = np.array(dfgpp.gppmax)
+    gpp_arr = np.array(dfgpp.gpp)
+    cond_arr = np.array(dfgpp.cond)
+    # k_arr = np.array(dfgpp.kgpp)
+    t_arr = np.array(dfgpp.airt)
+    # pr_arr = np.array(dfgpp.potpar)
+    par_arr = np.array(dfgpp.par)
+
+    # day_arr = np.array(dfgpp.dayfrac)
+    gpp_allmax = np.max(gpp_arr)
+ 
+    #%%
+    #%%
+    #slope0 = 97
+    def gpp_opt(pars):
+        slope_base = pars[1]
+        max0 = pars[0]
+        par_coef = max(0,pars[2])
+        par_effect = (par_arr/275)**par_coef
+        t_eff_max = np.exp(-(t_arr-pars[3])**2 / 20**2 / 2)
+        t_eff_max /= np.exp(-(25-pars[3])**2 / 20**2 / 2)
+        t_eff_slope = np.exp(-(t_arr-pars[4])**2 / 20**2 / 2)
+        t_eff_slope /= np.exp(-(25-pars[4])**2 / 20**2 / 2)
+        gppmax = max0*t_eff_max*par_effect
+        slope0 = slope_base*t_eff_slope
+        cond_res = max(0,pars[5])
+        cond_plant = np.clip(cond_arr-cond_res,0,np.inf)
+        gpp_pred = gppmax*(1-np.exp(-cond_plant*slope0/gppmax))
+        return (gpp_pred-gpp_arr)#[np.isfinite(gpp_samp)]
+    
+    fit0 = np.array([gpp_allmax,110,0.5,25,30,0.001])
+    gpp_optres = scipy.optimize.least_squares(gpp_opt,x0=fit0,method="lm")#,x_scale=np.abs(fit0))
+    
+    pars = gpp_optres.x
+    slope_base = pars[1]
+    max0 = pars[0]
+    par_coef = max(0,pars[2])
+    par_effect = (par_arr/275)**par_coef
+    t_eff_max = np.exp(-(t_arr-pars[3])**2 / 20**2 / 2)
+    t_eff_max /= np.exp(-(25-pars[3])**2 / 20**2 / 2)
+    t_eff_slope = np.exp(-(t_arr-pars[4])**2 / 20**2 / 2)
+    t_eff_slope /= np.exp(-(25-pars[4])**2 / 20**2 / 2)
+    gppmax = max0*t_eff_max*par_effect
+    slope0 = slope_base*t_eff_slope
+    cond_res = max(0,pars[5])
+    cond_plant = np.clip(cond_arr-cond_res,0,np.inf)
+    gpp_pred = gppmax*(1-np.exp(-cond_plant*slope0/gppmax))
+    
+    dfgpp["slope0"] = slope_base
+    dfgpp["tmean_points"] = np.mean(dfgpp.airt)
+    #dfgpp["par_coef"] = pars[4]
+    
+    dfgpp["par_coef"] = par_coef
+    #dfgpp["spring_coef"] = max(0,pars[5])
+    #dfgpp["fall_coef"] = max(0,pars[6])
+    dfgpp["topt_gmax"] = pars[3]
+    dfgpp["topt_slope"] = pars[4]
+    dfgpp["max0"] = max0
+    dfgpp["res_cond"] = cond_res
+
+    #%%
+    dfgpp["gppmax"] = gppmax
+    dfgpp["kgpp"] = gppmax/slope0
+    dfgpp["gpp_pred"] = gpp_pred
+    
+    return dfgpp
+#%%
+
+def fit_gpp_flex_slope_TP_res_laiday(df_in):
+    dfgpp = df_in.copy()
+    spring_arr = np.abs(np.array(dfgpp.drel_spring))
+    fall_arr = np.array(dfgpp.drel_fall)
+    # gm_arr = np.array(dfgpp.gppmax)
+    gpp_arr = np.array(dfgpp.gpp)
+    cond_arr = np.array(dfgpp.cond)
+    # k_arr = np.array(dfgpp.kgpp)
+    t_arr = np.array(dfgpp.airt)
+    # pr_arr = np.array(dfgpp.potpar)
+    par_arr = np.array(dfgpp.par)
+    LAI_arr = np.array(dfgpp.LAIint_rel)
+    day_arr = np.array(dfgpp.dayfrac)
+    day_arr /= np.max(day_arr)
+    gpp_allmax = np.max(gpp_arr)
+ 
+    #%%
+    #%%
+    #slope0 = 97
+    def gpp_opt(pars):
+        slope_base = pars[1]
+        max0 = pars[0]
+        par_coef = max(0,pars[2])
+        par_effect = (par_arr/275)**par_coef
+        t_eff_max = np.exp(-(t_arr-pars[3])**2 / 20**2 / 2)
+        t_eff_max /= np.exp(-(25-pars[3])**2 / 20**2 / 2)
+        t_eff_slope = np.exp(-(t_arr-pars[4])**2 / 20**2 / 2)
+        t_eff_slope /= np.exp(-(25-pars[4])**2 / 20**2 / 2)
+        gppmax = max0*t_eff_max*par_effect*day_arr*LAI_arr
+        slope0 = slope_base*t_eff_slope
+        cond_res = max(0,pars[5])
+        cond_plant = np.clip(cond_arr-cond_res,0,np.inf)
+        gpp_pred = gppmax*(1-np.exp(-cond_plant*slope0/gppmax))
+        return (gpp_pred-gpp_arr)#[np.isfinite(gpp_samp)]
+    
+    fit0 = np.array([gpp_allmax,110,0.5,25,30,0.001])
+    gpp_optres = scipy.optimize.least_squares(gpp_opt,x0=fit0,method="lm")#,x_scale=np.abs(fit0))
+    
+    pars = gpp_optres.x
+    slope_base = pars[1]
+    max0 = pars[0]
+    par_coef = max(0,pars[2])
+    par_effect = (par_arr/275)**par_coef
+    t_eff_max = np.exp(-(t_arr-pars[3])**2 / 20**2 / 2)
+    t_eff_max /= np.exp(-(25-pars[3])**2 / 20**2 / 2)
+    t_eff_slope = np.exp(-(t_arr-pars[4])**2 / 20**2 / 2)
+    t_eff_slope /= np.exp(-(25-pars[4])**2 / 20**2 / 2)
+    gppmax = max0*t_eff_max*par_effect*day_arr*LAI_arr
+    slope0 = slope_base*t_eff_slope
+    cond_res = max(0,pars[5])
+    cond_plant = np.clip(cond_arr-cond_res,0,np.inf)
+    gpp_pred = gppmax*(1-np.exp(-cond_plant*slope0/gppmax))
+    
+    dfgpp["slope0"] = slope_base
+    dfgpp["tmean_points"] = np.mean(dfgpp.airt)
+    #dfgpp["par_coef"] = pars[4]
+    
+    dfgpp["par_coef"] = par_coef
+    #dfgpp["spring_coef"] = max(0,pars[5])
+    #dfgpp["fall_coef"] = max(0,pars[6])
+    dfgpp["topt_gmax"] = pars[3]
+    dfgpp["topt_slope"] = pars[4]
+    dfgpp["max0"] = max0
+    dfgpp["res_cond"] = cond_res
+
+    #%%
+    dfgpp["gppmax"] = gppmax
+    dfgpp["kgpp"] = gppmax/slope0
+    dfgpp["gpp_pred"] = gpp_pred
+    
+    return dfgpp
+
+#%%
 def fit_gpp_fix_slope_TP_season_res(df_in,slope_base):
     dfgpp = df_in.copy()
     spring_arr = np.abs(np.array(dfgpp.drel_spring))

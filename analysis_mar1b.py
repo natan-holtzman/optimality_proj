@@ -28,9 +28,7 @@ import h5py
 #%%
 from fit_tau_res_cond2 import fit_tau_res , fit_tau_res_assume_max, fit_tau_res_assume_max_smin, fit_tau_res_width
 #from modular_gpp_funs import fit_gpp_flex_slope, fit_gpp_fix_slope, fit_gpp_fix_slope_day, fit_gpp_flex_slope_day, fit_gpp_fix_slope_res, fit_gpp_flex_slope_res, fit_gpp_flex_slope_TP_season,fit_gpp_flex_slope_TP_season_res
-from modular_gpp_funs import fit_gpp_flex_slope_TP_season,fit_gpp_flex_slope_TP_season_res,fit_gpp_fix_slope_TP_season_res
-
-
+from modular_gpp_funs import fit_gpp_flex_slope_TP,fit_gpp_flex_slope_TP_season,fit_gpp_flex_slope_TP_season_res,fit_gpp_fix_slope_TP_season_res,fit_gpp_flex_slope_TP_res
 from gpp_assume_c3default import fit_gpp_default, fit_gpp_default_res, fit_gpp_default_res_nopar, fit_gpp_symm
 #%%
 do_bif = 0
@@ -50,7 +48,8 @@ bif_data = pd.read_csv("fn2015_bif_tab_h.csv")
 bif_forest = bif_data.loc[bif_data.IGBP.isin(["MF","ENF","EBF","DBF","DNF","GRA","SAV","WSA","OSH","CSH"])].copy()
 metadata = pd.read_csv("fluxnet_site_info_all.csv")
 #%%
-
+dry_list = pd.read_csv("dry_site_list.csv")
+bif_forest["is_dry_limited"] = bif_forest.SITE_ID.isin(dry_list.SITE_ID)
 #%%
 fig_size = plt.rcParams["figure.figsize"]
 fig_size[0] = 14
@@ -77,7 +76,7 @@ site_result = {}
 #sites_late_season = pd.read_csv("late_summer_data.csv")
 #rain_data = pd.read_csv("rain_late_season.csv")
 #%%
-sites_late_season = pd.read_csv("gs_50_50_mar5.csv")
+df_in = pd.read_csv("gs_50_50_mar5.csv")
 #sites_late_season.gpp = 1*sites_late_season.gpp_nt #+ sites_late_season.gpp)/2
 
 #sites_late_season.gpp = (sites_late_season.gpp_nt + sites_late_season.gpp)/2
@@ -89,9 +88,9 @@ sites_late_season = pd.read_csv("gs_50_50_mar5.csv")
 
 #sites_late_season = sites_late_season.loc[sites_late_season.SITE_ID.isin(pd.unique(sites_old.SITE_ID))]
 #%%
-sites_late_season = pd.merge(sites_late_season,bif_forest,on="SITE_ID",how='left')
+df_in = pd.merge(df_in,bif_forest,on="SITE_ID",how='left')
 #%%
-sites_late_season["res_cond"] = 0
+df_in["res_cond"] = 0
 
 
 simple_biomes = {"SAV":"Savanna",
@@ -107,16 +106,32 @@ simple_biomes = {"SAV":"Savanna",
 biome_list = ["Evergreen needleleaf forest", "Mixed forest", "Deciduous broadleaf forest", "Evergreen broadleaf forest",
               "Grassland","Shrubland","Savanna"]
 
-sites_late_season["combined_biome"] = [simple_biomes[x] for x in sites_late_season["IGBP"]]
+df_in["combined_biome"] = [simple_biomes[x] for x in df_in["IGBP"]]
 
 #%%
 
-sites_late_season = sites_late_season.loc[sites_late_season["gpp"]  > 0]
-#sites_late_season = sites_late_season.loc[sites_late_season["par"]  > 150]
+df_in = df_in.loc[df_in["gpp"]  > 0]
+#df_in = df_in.loc[df_in["par"]  > 150]
 #%%
-sites_late_season["drel_spring"] = -np.clip(sites_late_season["doy"] - sites_late_season["summer_peak"],-np.inf,0) / (sites_late_season["summer_peak"] - sites_late_season["summer_start"])
-sites_late_season["drel_fall"] = np.clip(sites_late_season["doy"] - sites_late_season["summer_peak"],0,np.inf) / (sites_late_season["summer_end"] - sites_late_season["summer_peak"])
-sites_late_season["drel_both"] = -sites_late_season["drel_spring"] + sites_late_season["drel_fall"]
+df_in["drel_spring"] = -np.clip(df_in["doy"] - df_in["summer_peak"],-np.inf,0) / (df_in["summer_peak"] - df_in["summer_start"])
+df_in["drel_fall"] = np.clip(df_in["doy"] - df_in["summer_peak"],0,np.inf) / (df_in["summer_end"] - df_in["summer_peak"])
+df_in["drel_both"] = -df_in["drel_spring"] + df_in["drel_fall"]
+#%%
+#sites_late_season = sites_late_season.loc[np.abs(sites_late_season.drel_both) <= 0.5].copy()
+#sites_late_season = sites_late_season.loc[sites_late_season.drel_both >= 0].copy()
+
+day_amp = np.exp(-3.175 + 3.910*np.abs(df_in.LOCATION_LAT)/90)
+prad_norm = (df_in.potpar - df_in.potpar_min)/(df_in.potpar_max-df_in.potpar_min)
+day_est = prad_norm * day_amp + (0.5 - day_amp/2)
+day_rel = day_est/0.5
+#%%
+# df_in.gpp /= day_rel
+# df_in.gpp_nt /= day_rel
+# df_in.ET /= day_rel
+# df_in.cond /= day_rel
+# df_in.par /= day_rel
+#%%
+df_in["dayfrac"] = day_est
 #%%
 useLAI = 0
 if useLAI:
@@ -133,23 +148,32 @@ if useLAI:
                                 "month":np.tile(month_template,len(bif_forest))})
     
     lai_int = []
-    for site_id in pd.unique(sites_late_season.SITE_ID):
+    for site_id in pd.unique(df_in.SITE_ID):
         #print(site_id)
-        dfi = sites_late_season.loc[sites_late_season.SITE_ID==site_id].copy()
+        dfi = df_in.loc[df_in.SITE_ID==site_id].copy()
         doy_arr = np.array(dfi.doy_raw)
         lai_site_tab = lai_piv_tab.loc[lai_piv_tab.SITE_ID==site_id].copy().sort_values("month")
         lai_arr = np.interp(doy_arr,  (np.arange(12)+0)/12*365,   np.array(lai_site_tab.LAIclim))
         lai_int.append(lai_arr/np.max(lai_arr))
-    sites_late_season["LAIint_rel"] = np.concatenate(lai_int)
-
+    df_in["LAIint_rel"] = np.concatenate(lai_int)
+#%%
+#df_in["LAIint_rel"] = 1
+#df_in = df_in.loc[np.isfinite(df_in.LAIint_rel)]
+# df_in.gpp /= df_in.LAIint_rel
+# df_in.gpp_nt /= df_in.LAIint_rel
+# df_in.ET /= df_in.LAIint_rel
+# df_in.cond /= df_in.LAIint_rel
+#df_in.par /= day_rel
 #%%
 all_results = []
 
-for site_id in pd.unique(sites_late_season.SITE_ID)[:]:#[forest_daily[x] for x in [70,76]]:
+for site_id in pd.unique(df_in.SITE_ID)[:]:#[forest_daily[x] for x in [70,76]]:
 #%%
     print(site_id)
-    dfgpp = sites_late_season.loc[sites_late_season.SITE_ID==site_id].copy()
+    dfgpp = df_in.loc[df_in.SITE_ID==site_id].copy()
     dfgpp = dfgpp.loc[dfgpp.airt > 5]
+    #%%
+    dfgpp = dfgpp.loc[dfgpp.drel_both >= 0]
     #%%
     #day_amp = np.exp(-3.175 + 3.910*np.abs(dfgpp.LOCATION_LAT)/90)
     #prad_norm = (dfgpp.potpar - dfgpp.potpar_min)/(dfgpp.potpar_max-dfgpp.potpar_min)
@@ -203,10 +227,13 @@ for site_id in pd.unique(sites_late_season.SITE_ID)[:]:#[forest_daily[x] for x i
     #dfgpp = fit_gpp_fix_slope(df_avg,100)
     #dfgpp = fit_gpp_flex_slope_res(df_avg,110)
     #dfgpp2 = fit_gpp_flex_slope_TP(df_avg)
-    dfgpp = fit_gpp_flex_slope_TP_season_res(df_avg)
+    dfgpp = fit_gpp_flex_slope_TP_season(df_avg)
+    #dfgpp = fit_gpp_flex_slope_TP_res_laiday(df_avg)
 
 #    dfgpp = fit_gpp_flex_slope(df_avg)
 #    dfgpp = fit_gpp_fix_slope_day(df_avg,85)
+#%%
+    
 #%%
     #dfgpp.cond = np.clip(dfgpp.cond - dfgpp.res_cond,0,np.inf)
     #dfgpp.res_cond = 0
@@ -237,7 +264,7 @@ for site_id in pd.unique(sites_late_season.SITE_ID)[:]:#[forest_daily[x] for x i
     if len(dfgpp) < 10:
          continue
     #%%
-    #dfgpp["waterbal"] = 1*dfgpp.sinterp
+   # dfgpp["waterbal"] = 1*dfgpp.sinterp
     if dfgpp.inflow.iloc[0] > 0:
         continue
     #dfgpp.kgpp *= dfgpp.gpp/dfgpp.gpp_pred
@@ -270,7 +297,16 @@ for site_id in pd.unique(sites_late_season.SITE_ID)[:]:#[forest_daily[x] for x i
     dfi["max_limitation"] = np.min(dfi.et_tau/dfi.et_null)
     dfi["soil_max"] = np.max(dfi.waterbal)
     dfi["soil_min"] = np.min(dfi.waterbal)
+    #%%
+    # plt.figure(figsize= (10,10))
+    # plt.subplot(2,1,1)
+    # plt.plot(dfi.doy, dfi.gpp-dfi.gpp_pred,'o',alpha=0.67); 
+    # plt.ylabel("GPP residual")
+    # plt.subplot(2,1,2)
+    # plt.plot(dfi.doy, (dfi.ET-dfi.et_tau)*18/1000*24*60*60,'o',alpha=0.67); 
+    # plt.ylabel("ET residual")
     
+    # plt.xlabel("Day of year")
 #%%
     dfi["npoints"] = len(dfi)
     all_results.append(dfi)
@@ -435,7 +471,7 @@ df_meta = df1.copy()
 #%%
 fval = ((1-df_meta.etr2_null)-(1-df_meta.etr2_smc))/(1-df_meta.etr2_smc)*(df_meta.npoints-4)
 df_meta["ftest"] = 1-scipy.stats.f.cdf(x=fval,dfn=1,dfd=df_meta.npoints-4)
-df_meta = df_meta.loc[df_meta.ftest < 0.01]
+df_meta = df_meta.loc[df_meta.ftest < 0.05]
 #df_meta = df_meta.loc[df_meta.tau_rel_unc < 0.25].copy()
 #%%
 df_meta = df_meta.loc[df_meta.gppR2 > 0.01].copy()
@@ -452,7 +488,7 @@ df_meta = df_meta.loc[df_meta.tau > 0]
 #%%
 df_meta["rel_err"] = (df_meta.etr2_smc-df_meta.etr2_null)#/(1-df_meta.etr2_null)
 #%%
-#df_meta = df_meta.loc[df_meta.rel_err > 0.01]
+#df_meta = df_meta.loc[df_meta.rel_err > 0.05]
 #%%
 #df_meta["rel_err_lim"] = (df_meta.etr2_limited_smc-df_meta.etr2_limited_null)/(1-df_meta.etr2_limited_null)
 
@@ -502,7 +538,13 @@ fig,ax = plt.subplots(1,1,figsize=(10,8))
 lmax = 1.1*np.max(df_meta.ddrain_mean)
 
 #line1, = ax.plot([0,lmax],[0,lmax],"k",label="1:1 line, $R^2$=0.59")
-reg_lab = "Regression line\n($R^2$ = " + str(np.round(rainmod.rsquared,2)) + ")"
+betas = np.array(np.round(np.abs(rainmod.params),2)).astype(str)
+if rainmod.params[0] < 0:
+    reg_eqn = r"$\tau$ = "+betas[1]+"$D_{max}$"+" - "+betas[0]
+else:
+    reg_eqn = r"$\tau$ = "+betas[1]+"$D_{max}$"+" + "+betas[0]
+r2_txt = "($R^2$ = " + str(np.round(rainmod.rsquared,2)) + ")"
+reg_lab = "Regression line" + "\n" + reg_eqn + "\n" + r2_txt
 line2, = ax.plot([0,lmax],np.array([0,lmax])*rainmod.params[1]+rainmod.params[0],"b--",label=reg_lab)
 #plt.plot([0,150],np.array([0,150])*reg0.params[0],"b--",label="Regression line\n($R^2$ = 0.39)")
 leg1 = ax.legend(loc="upper left")

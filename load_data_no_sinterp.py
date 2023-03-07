@@ -169,7 +169,6 @@ def prepare_df(fname, site_id, bif_forest):
     le_75 = np.array(df['LE_CORR_75']) #/ 44200 
     et_summer[np.isnan(le_25*le_75)] = np.nan
     
-    
     myrn = np.array(meancols(df,"NETRAD"))
      
     sw = meancols(df,"SW_IN") -meancols(df,"SW_OUT") 
@@ -185,7 +184,6 @@ def prepare_df(fname, site_id, bif_forest):
     
     vpd_summer[vpd_summer < 0.1] = np.nan
     
-    
     et_summer[et_summer <= 0] = np.nan
     #et_summer[np.isnan(etunc_summer)] = np.nan
     #%%
@@ -197,8 +195,6 @@ def prepare_df(fname, site_id, bif_forest):
     if np.mean(np.isfinite(ground_heat)) < 0.5:
         ground_heat = 0.1*myrn
 
-    
-    
     rain_summer = np.array(df["P_F"])
     #%%
     if np.sum(np.isfinite(et_summer)) < (25):
@@ -212,11 +208,9 @@ def prepare_df(fname, site_id, bif_forest):
     
     gpp_clim = np.array(1*my_clim["GPP_DT_VUT_REF"] + 1*my_clim["GPP_NT_VUT_REF"])/2
     
-    
     gpp_clim_std = gpp_clim - np.nanmin(gpp_clim)
     
     gpp_adjoin = fill_na(np.tile(gpp_clim,3))
-    
     
     gpp_smooth = np.zeros(len(gpp_adjoin))
     for i in range(15,len(gpp_smooth)-15):

@@ -398,11 +398,29 @@ def prepare_df(fname, site_id, bif_forest):
     rain_prev = 0*rain_summer
     rain_prev[1:] = rain_summer[:-1]
     #%%
+    #rain_fake = 1*rain_summer
+    #rain_fake[doy_summer==summer_end] = np.inf
+    #rain_for_dict = [rain_fake[is_late_summer],np.array(df.year)[is_late_summer]]
+    
     rain_fake = 1*rain_summer
-    rain_fake[doy_summer==summer_end] = np.inf
-    rain_for_dict = [rain_fake[is_late_summer],np.array(df.year)[is_late_summer]]
-    #not sure whether using rain over entire or late summer is more appropriate
-#    rain_dict[site_id] = [rain_fake[is_summer],np.array(df.year)[is_summer]]
+    rain_fake[doy_summer==365] = np.inf
+    rain_for_dict = [rain_fake,np.array(df.year)]
+#%%
+
+    smc_summer, smc_name = lastcols(df,'SWC')
+    smc_summer = np.array(smc_summer)
+    
+    try:
+        smc_qc = np.array(df[smc_name + "_QC"])
+        smc_summer[smc_qc==0] = np.nan
+        bothgood = np.isfinite(smc_summer*waterbal_corr)
+        try:
+            sinterp = np.interp(smc_summer,np.sort(smc_summer[bothgood]),np.sort(waterbal_corr[bothgood]))
+        except ValueError:
+            sinterp = np.nan*smc_summer
+    except KeyError:
+        smc_summer = np.nan*waterbal_corr
+        sinterp = np.nan*waterbal_corr
 
     
     #%%
@@ -422,10 +440,10 @@ def prepare_df(fname, site_id, bif_forest):
                               "myga":myga,"sV":sV,
                               "rain":rain_summer,
                               "rain_prev":rain_prev,
-                              #"smc":smc_summer,
+                              "smc":smc_summer,
                               "vpd":vpd_summer,
                               "et_unc":df.LE_RANDUNC/44200,
-                              #"sinterp":sinterp
+                              "sinterp":sinterp,
                               "nee_unc":df.NEE_VUT_REF_RANDUNC,#,/-df.NEE_VUT_REF,
                               #"gpp_unc_DT":(df.GPP_DT_VUT_75-df.GPP_DT_VUT_25),#/df.GPP_DT_VUT_REF,
                               #"gpp_unc_NT":(df.GPP_NT_VUT_75-df.GPP_NT_VUT_25),#/df.GPP_NT_VUT_REF,
@@ -443,7 +461,7 @@ def prepare_df(fname, site_id, bif_forest):
         ans[is_summer] = 1*x
         return ans
     
-    df_to_fit = df_to_fit_full.loc[is_summer].dropna(subset = set(df_to_fit_full.columns)-{"sinterp_anom","sint_mult","sinterp_mean2","sinterp_anom2"})
+    df_to_fit = df_to_fit_full.loc[is_summer].dropna(subset = set(df_to_fit_full.columns)-{"smc","sinterp"})
 
     df_to_fit = df_to_fit.loc[df_to_fit.par >= 100]
     
@@ -541,18 +559,18 @@ for fname in forest_daily:#[forest_daily[x] for x in [70,76]]:
     all_results.append(df_to_fit)
     #%%
 all_results = pd.concat(all_results)
-all_results.to_csv("gs_50_50_mar1b.csv")
+all_results.to_csv("gs_50_50_mar5.csv")
 #%%
-sites = []
-years = []
-rains = []
-for x in rain_dict.keys():
-    ri = rain_dict[x][0]
-    sites.append(np.array([x]*len(ri)))
-    years.append(rain_dict[x][1])
-    rains.append(ri)
-#%%
-raindf = pd.DataFrame({"SITE_ID":np.concatenate(sites),
-                      "year":np.concatenate(years),
-                      "rain_mm":np.concatenate(rains)})
-raindf.to_csv("rain_50_50_mar1b.csv")
+# sites = []
+# years = []
+# rains = []
+# for x in rain_dict.keys():
+#     ri = rain_dict[x][0]
+#     sites.append(np.array([x]*len(ri)))
+#     years.append(rain_dict[x][1])
+#     rains.append(ri)
+# #%%
+# raindf = pd.DataFrame({"SITE_ID":np.concatenate(sites),
+#                       "year":np.concatenate(years),
+#                       "rain_mm":np.concatenate(rains)})
+# raindf.to_csv("rain_all_mar2.csv")

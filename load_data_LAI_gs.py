@@ -244,7 +244,7 @@ def prepare_df(fname, site_id, bif_forest):
     #%%
 #    is_summer = df.gpp_smooth/df.gpp_y95 >= 0.5
     is_summer = df.LAI/df.lai_y95 >= 0.75
-
+    is_summer_90 = df.LAI/df.lai_y95 >= 0.9
 #%%
     gpp_clim_smooth_raw = gpp_clim_smooth[366:366*2]
     gpp_clim_smooth = gpp_clim_smooth_raw #- np.min(gpp_clim_smooth_raw)
@@ -414,13 +414,13 @@ def prepare_df(fname, site_id, bif_forest):
     rain_prev = 0*rain_summer
     rain_prev[1:] = rain_summer[:-1]
     #%%
-    #rain_fake = 1*rain_summer
-    #rain_fake[doy_summer==summer_end] = np.inf
-    #rain_for_dict = [rain_fake[is_late_summer],np.array(df.year)[is_late_summer]]
-    
     rain_fake = 1*rain_summer
-    rain_fake[doy_summer==365] = np.inf
-    rain_for_dict = [rain_fake,np.array(df.year)]
+    #rain_fake[doy_summer==summer_end] = np.inf
+    rain_for_dict = [rain_fake[is_late_summer],np.array(df.year)[is_late_summer]]
+    
+    # rain_fake = 1*rain_summer
+    # rain_fake[doy_summer==365] = np.inf
+    # rain_for_dict = [rain_fake,np.array(df.year)]
 #%%
 
     smc_summer, smc_name = lastcols(df,'SWC')
@@ -586,18 +586,18 @@ for fname in forest_daily:#[forest_daily[x] for x in [70,76]]:
     all_results.append(df_to_fit)
     #%%
 all_results = pd.concat(all_results)
-all_results.to_csv("gs_50_laiGS_mar10.csv")
+#all_results.to_csv("gs_50_laiGS_mar10.csv")
 #%%
-# sites = []
-# years = []
-# rains = []
-# for x in rain_dict.keys():
-#     ri = rain_dict[x][0]
-#     sites.append(np.array([x]*len(ri)))
-#     years.append(rain_dict[x][1])
-#     rains.append(ri)
-# #%%
-# raindf = pd.DataFrame({"SITE_ID":np.concatenate(sites),
-#                       "year":np.concatenate(years),
-#                       "rain_mm":np.concatenate(rains)})
-# raindf.to_csv("rain_all_mar2.csv")
+sites = []
+years = []
+rains = []
+for x in rain_dict.keys():
+    ri = rain_dict[x][0]
+    sites.append(np.array([x]*len(ri)))
+    years.append(rain_dict[x][1])
+    rains.append(ri)
+#%%
+raindf = pd.DataFrame({"SITE_ID":np.concatenate(sites),
+                      "year":np.concatenate(years),
+                      "rain_mm":np.concatenate(rains)})
+raindf.to_csv("rain_all_mar11.csv")

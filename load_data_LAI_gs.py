@@ -114,10 +114,13 @@ def prepare_df(fname, site_id, bif_forest):
     #print(site_id)
     
     df["year"] = df["TIMESTAMP"].dt.year
+    df["year_new"] = 1*df["year"]
     
     df["doy_new"] = 1*df.doy
     if latdeg < 0:
         df["doy_new"] = (df["TIMESTAMP"] + datetime.timedelta(days=182)).dt.dayofyear
+        df["year_new"] = (df["TIMESTAMP"] + datetime.timedelta(days=182)).dt.year
+
     #%%
     laifile = "lai_csv/lai_csv/" + "_".join(site_id.split("-")) + "_LAI_FLX15.csv"
     try:
@@ -130,7 +133,8 @@ def prepare_df(fname, site_id, bif_forest):
         df2 = None
     except:
         lai_all = np.zeros(len(df))
-    
+    df["LAI"] = lai_all
+
     #df["SITE_ID"] = site_id
     #df = pd.merge(df,lai_piv_tab,on=["SITE_ID","month"],how='left')
     
@@ -153,7 +157,7 @@ def prepare_df(fname, site_id, bif_forest):
 
     et_qc = np.array(df.LE_F_MDS_QC)
     et_summer[et_qc < 0.5] = np.nan
-    
+    #%%
     
     le_25 = np.array(df['LE_CORR_25']) #/ 44200 
     le_75 = np.array(df['LE_CORR_75']) #/ 44200 
@@ -232,19 +236,25 @@ def prepare_df(fname, site_id, bif_forest):
     gpp_smooth[-swidth:] = np.mean(gpp_summer[-swidth:])
     #%%
     df["gpp_smooth"] = gpp_smooth
-    df["LAI"] = lai_all
     #%%
     #%%
-    year95 = df.groupby("year").quantile(0.95,numeric_only=True).reset_index()
+    year95 = df.groupby("year_new").quantile(0.95,numeric_only=True).reset_index()
     year95["gpp_y95"] = 1*year95["gpp_smooth"]
     year95["lai_y95"] = 1*year95["LAI"]
-
+#%%
+    yearMin = df.groupby("year_new").min(numeric_only=True).reset_index()
+    #year05["gpp_y95"] = 1*year95["gpp_smooth"]
+    yearMin["lai_ymin"] = 1*yearMin["LAI"]
     #%%
-    df = pd.merge(df,year95[["year","gpp_y95","lai_y95"]],how="left",on="year")
+    df = pd.merge(df,year95[["year_new","gpp_y95","lai_y95"]],how="left",on="year_new")
+    #%%
+    df = pd.merge(df,yearMin[["year_new","lai_ymin"]],how="left",on="year_new")
+    
     #%%
 #    is_summer = df.gpp_smooth/df.gpp_y95 >= 0.5
-    is_summer = df.LAI/df.lai_y95 >= 0.75
-    is_summer_90 = df.LAI/df.lai_y95 >= 0.9
+    #is_summer = df.LAI/df.lai_y95 >= 0.75
+    #is_summer_90 = df.LAI/df.lai_y95 >= 0.9
+    is_summer = (df.LAI-df.lai_ymin)/(df.lai_y95-df.lai_ymin) > 0.67
 #%%
     gpp_clim_smooth_raw = gpp_clim_smooth[366:366*2]
     gpp_clim_smooth = gpp_clim_smooth_raw #- np.min(gpp_clim_smooth_raw)
@@ -445,7 +455,7 @@ def prepare_df(fname, site_id, bif_forest):
     
     
     #%%
-    df_to_fit_full = pd.DataFrame({"date":df.date,"airt":airt_summer,"year":df.year,
+    df_to_fit_full = pd.DataFrame({"date":df.date,"airt":airt_summer,"year":df.year,"year_new":df.year_new,
                               "par":par_summer,"cosz":cosz,
                               "potpar":potpar,
                               "potpar_mean":np.nanmean(potpar),
@@ -586,7 +596,7 @@ for fname in forest_daily:#[forest_daily[x] for x in [70,76]]:
     all_results.append(df_to_fit)
     #%%
 all_results = pd.concat(all_results)
-#all_results.to_csv("gs_50_laiGS_mar10.csv")
+all_results.to_csv("gs_50_laiGS_mar12d.csv")
 #%%
 sites = []
 years = []
@@ -600,4 +610,4 @@ for x in rain_dict.keys():
 raindf = pd.DataFrame({"SITE_ID":np.concatenate(sites),
                       "year":np.concatenate(years),
                       "rain_mm":np.concatenate(rains)})
-raindf.to_csv("rain_all_mar11.csv")
+raindf.to_csv("rain_all_mar12d.csv")

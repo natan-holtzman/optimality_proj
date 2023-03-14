@@ -27,9 +27,7 @@ import matplotlib as mpl
 import h5py
 #%%
 from fit_tau_res_cond2 import fit_tau_res, fit_tau_res_evi , fit_tau_res_assume_max, fit_tau_res_assume_max_smin, fit_tau_res_width
-#from modular_gpp_funs import fit_gpp_flex_slope, fit_gpp_fix_slope, fit_gpp_fix_slope_day, fit_gpp_flex_slope_day, fit_gpp_fix_slope_res, fit_gpp_flex_slope_res, fit_gpp_flex_slope_TP_season,fit_gpp_flex_slope_TP_season_res
-from modular_gpp_funs import *
-#from gpp_assume_c3default import *
+from gpp_funs_mar13 import fit_gpp, fit_gpp_tonly
 #%%
 do_bif = 0
 if do_bif:
@@ -77,10 +75,15 @@ site_result = {}
 #rain_data = pd.read_csv("rain_late_season.csv")
 #%%
 #df_in = pd.read_csv("gs50_constGS_evi_lai.csv")
-df_in = pd.read_csv("gs_50_laiGS_mar12c.csv")
-rain_data = pd.read_csv("rain_all_mar12c.csv")
+#df_in = pd.read_csv("gs_50_laiGS_mar12b.csv")
 
+#df2 = pd.read_csv("gs50_mar13_lai_evi.csv")
+df_in = pd.read_csv("gs_50_laiGS_mar13.csv")
+#df_in = pd.merge(df_in,df2[["SITE_ID","EVIint","EVIside","date"]],on=["SITE_ID","date"],how='left')
 
+rain_data = pd.read_csv("rain_50_mar13.csv")
+
+#%%
 #df_in = pd.read_csv("gs50_varGS_evi_lai.csv")
 #df_in = pd.merge(df_in,df2[["SITE_ID","date","summer_peak","summer_start","summer_end"]],on=["SITE_ID","date"],how='left')
 #df2 = None
@@ -116,48 +119,16 @@ df_in["drel_both"] = -df_in["drel_spring"] + df_in["drel_fall"]
 #%%
 df_in = df_in.loc[np.isfinite(df_in.drel_both)]
 #%%
-#sites_late_season = sites_late_season.loc[np.abs(sites_late_season.drel_both) <= 0.5].copy()
-#sites_late_season = sites_late_season.loc[sites_late_season.drel_both >= 0].copy()
-
-day_amp = np.exp(-3.175 + 3.910*np.abs(df_in.LOCATION_LAT)/90)
-prad_norm = (df_in.potpar - df_in.potpar_min)/(df_in.potpar_max-df_in.potpar_min)
-day_est = prad_norm * day_amp + (0.5 - day_amp/2)
-day_rel = day_est/0.5
-#%%
-# df_in.gpp /= day_rel
-# df_in.gpp_nt /= day_rel
-# df_in.ET /= day_rel
-# df_in.cond /= day_rel
-# df_in.par /= day_rel
-#%%
-df_in["dayfrac"] = day_est
-#%%
-#%%
-#df_in["LAIint_rel"] = 1*df_in.EVIint - 0.1
-df_in["LAIint_rel"] = 1*df_in.LAI
-df_in = df_in.loc[np.isfinite(df_in.LAIint_rel)]
-#df_in = df_in.loc[df_in.vpd > 0.5]
-#df_in = df_in.loc[df_in.gpp > 1]
-#df_in = df_in.loc[df_in.gpp_unc < 0.33]
-
-#%%
-#df_in = df_in.loc[df_in.LAI/df_in.lai_yq95 > 0.9]
-# df_in.gpp /= df_in.LAIint_rel
-# df_in.gpp_nt /= df_in.LAIint_rel
-# df_in.ET /= df_in.LAIint_rel
-# df_in.cond /= df_in.LAIint_rel
-#df_in.par /= day_rel
-#%%
 #dfgpp_together = fit_gpp_flex_slope_TP_nores_laiday(df_in)
 daytab = pd.read_csv("site_daylight.csv",parse_dates=["date"])
 daytabH = pd.read_csv("site_hourly_daylight.csv",parse_dates=["date"])
 daytab = pd.concat([daytab,daytabH]).reset_index()
 
-daytab["doy"] = daytab.date.dt.dayofyear
+daytab["doy_raw"] = daytab.date.dt.dayofyear
 #%%
-daytab_avg = daytab.groupby(["SITE_ID","doy"]).mean(numeric_only=True).reset_index()
+daytab_avg = daytab.groupby(["SITE_ID","doy_raw"]).mean(numeric_only=True).reset_index()
 #%%
-df_in = pd.merge(df_in,daytab_avg[["SITE_ID","doy","SW_IN_POT","NIGHT"]],on=["SITE_ID","doy"],how="left")
+df_in = pd.merge(df_in,daytab_avg[["SITE_ID","doy_raw","SW_IN_POT","NIGHT"]],on=["SITE_ID","doy_raw"],how="left")
 df_in = df_in.loc[np.isfinite(df_in.NIGHT)]
 #%%
 all_results = []
@@ -170,24 +141,20 @@ for site_id in pd.unique(df_in.SITE_ID)[:]:#[forest_daily[x] for x in [70,76]]:
     #dfgpp = dfgpp.loc[dfgpp.EVIside >= 0]
     #dfgpp = dfgpp.loc[dfgpp.drel_both >= 0]
     #%%
+    #dfgpp = dfgpp.loc[np.isfinite(dfgpp.EVIint)]
+    #%%
     if len(dfgpp) == 0:
         continue
     #%%
-    # y1 = np.array(1-dfgpp.NIGHT)
-    # x1 = np.array(dfgpp.doy*2*np.pi/365)
-    # xstack = sm.add_constant(np.stack((np.cos(x1),np.sin(x1)),1))
-    # r1 = sm.OLS(y1,xstack).fit()
-    #dfgpp.dayfrac = r1.fittedvalues
+    #dfgpp["dayfrac"] = 1-dfgpp.NIGHT
     #%%
-    dfgpp.dayfrac = 1-dfgpp.NIGHT
-    
-    dfgpp.dayfrac /= np.max(dfgpp.dayfrac)
-    dfgpp.LAI /= np.max(dfgpp.LAI)
-#    dfgpp = dfgpp.loc[dfgpp.dayfrac > 0.9]
+    y1 = np.array(1-dfgpp.NIGHT)
+    x1 = np.array(dfgpp.doy*2*np.pi/365)
+    xstack = sm.add_constant(np.stack((np.cos(x1),np.sin(x1)),1))
+    r1 = sm.OLS(y1,xstack).fit()
+    dfgpp["dayfrac"] = r1.fittedvalues
     #%%
-    dfgpp["normcond"] = dfgpp.cond/dfgpp.LAI/dfgpp.dayfrac
-    dfgpp["normgpp"] = dfgpp.gpp/dfgpp.LAI/dfgpp.dayfrac
-    dfgpp["normrad"] = dfgpp.par/dfgpp.dayfrac
+    #dfgpp.LAI = (dfgpp.EVIint - np.mean(dfgpp.EVIint))/np.std(dfgpp.EVIint)*np.std(dfgpp.LAI) + np.mean(dfgpp.LAI)
 #%%
     cn = 1*dfgpp.cond
     cn -= np.mean(cn)
@@ -197,47 +164,54 @@ for site_id in pd.unique(df_in.SITE_ID)[:]:#[forest_daily[x] for x in [70,76]]:
     lcn -= np.mean(lcn)
     dfgpp = dfgpp.loc[np.abs(lcn) < 3*np.std(lcn)]
     #%%
-    airt_arr = np.array(dfgpp.airt)
-    Ngpp_arr = np.array(dfgpp.normgpp)
-    Ncond_arr = np.array(dfgpp.normcond)
-    nrad_arr = np.array(dfgpp.normrad)
     
-    def tofit(pars):
-        basemax = pars[0]
-        slope = pars[1]
-        t_effect = np.exp(-(airt_arr-pars[2])**2/20**2/2)
-        t_effect /= np.exp(-(25-pars[2])**2/20**2/2)
-        par_effect = (nrad_arr/275)**max(0,pars[3])
-        gppmax = t_effect*basemax*par_effect
-        gpp_pred = gppmax*(1-np.exp(-Ncond_arr/gppmax*slope))
-        return gpp_pred - Ngpp_arr
-    fit0 = np.array([np.max(Ngpp_arr),120,25,0.5])
-    cond_optres = scipy.optimize.least_squares(tofit,x0=fit0,method="lm",x_scale=np.abs(fit0))
-    pars = cond_optres.x
-   
-    basemax = pars[0]
-    slope = pars[1]
-    t_effect = np.exp(-(airt_arr-pars[2])**2/20**2/2)
-    t_effect /= np.exp(-(25-pars[2])**2/20**2/2)
-    par_effect = (nrad_arr/275)**max(0,pars[3])
-    gppmax = t_effect*basemax*par_effect
-    gpp_pred = gppmax*(1-np.exp(-Ncond_arr/gppmax*slope))
+    dfgpp.dayfrac /= np.max(dfgpp.dayfrac)
+    dfgpp.LAI /= np.max(dfgpp.LAI)
+#    dfgpp = dfgpp.loc[dfgpp.dayfrac > 0.9]
     
     #%%
-    dfgpp["gppmax"] = gppmax*dfgpp.LAI*dfgpp.dayfrac
-    dfgpp["kgpp"] = dfgpp["gppmax"]/slope
-    dfgpp["gpp_pred"] = gpp_pred*dfgpp.LAI*dfgpp.dayfrac
-    #dfgpp["res_cond"] = res_cond*dfgpp.dayfrac
+    # dfgpp["normcond"] = dfgpp.cond/dfgpp.LAI/dfgpp.dayfrac
+    # dfgpp["normgpp"] = dfgpp.gpp/dfgpp.LAI/dfgpp.dayfrac
+    # dfgpp["normrad"] = dfgpp.par/dfgpp.dayfrac
+    # #dfgpp["res_cond"] = res_cond*dfgpp.dayfrac
+    # #%%
+    # dfgpp = fit_gpp(dfgpp.copy())
+    # #%%
     
+    #dfgpp.LAI = dfgpp.EVIint/np.max(dfgpp.EVIint)
+    dfgpp["normcond"] = dfgpp.cond/dfgpp.LAI/dfgpp.dayfrac
+    dfgpp["normgpp"] = dfgpp.gpp/dfgpp.LAI/dfgpp.dayfrac
+    dfgpp["normrad"] = dfgpp.par/dfgpp.dayfrac
+    
+    dfgpp = fit_gpp_tonly(dfgpp.copy())
+    #dfgpp = fit_gpp_mech(dfgpp.copy())
+
+    # #%%
+    # if dfgpp2.gppR2.iloc[0] > dfgpp1.gppR2.iloc[0]:
+    #     dfgpp = dfgpp2.copy()
+    # else:
+    #     dfgpp = dfgpp1.copy()
+
     #%%
     lo_soil = dfgpp.waterbal < np.nanquantile(dfgpp.waterbal,0.25)
     hi_soil = dfgpp.waterbal > np.nanquantile(dfgpp.waterbal,0.75)
+    
+    #lo_soil = dfgpp.smc < np.nanquantile(dfgpp.smc,0.25)
+    #hi_soil = dfgpp.smc > np.nanquantile(dfgpp.smc,0.75)
     dfgpp["cond_lo_smc"] = np.nanmedian(dfgpp.cond[lo_soil])
     dfgpp["cond_hi_smc"] = np.nanmedian(dfgpp.cond[hi_soil])
 
     cond_dq = dfgpp.cond * np.sqrt(dfgpp.vpd)
     dfgpp["acond_lo_smc"] = np.nanmedian(cond_dq[lo_soil])
     dfgpp["acond_hi_smc"] = np.nanmedian(cond_dq[hi_soil])
+    
+    cond_dq = dfgpp.normcond
+    dfgpp["ncond_lo_smc"] = np.nanmedian(cond_dq[lo_soil])
+    dfgpp["ncond_hi_smc"] = np.nanmedian(cond_dq[hi_soil])
+    
+    cond_dq = dfgpp.normcond * np.sqrt(dfgpp.vpd)
+    dfgpp["ancond_lo_smc"] = np.nanmedian(cond_dq[lo_soil])
+    dfgpp["ancond_hi_smc"] = np.nanmedian(cond_dq[hi_soil])
     
     #%%
     if len(dfgpp) < 10:
@@ -251,42 +225,6 @@ for site_id in pd.unique(df_in.SITE_ID)[:]:#[forest_daily[x] for x in [70,76]]:
     if np.min(dfgpp.kgpp) <= 0:
          continue
     #%%
-#%% #%%
-    dfgpp["gppR2"] = 1- np.mean((dfgpp.gpp-dfgpp.gpp_pred)**2)/np.var(dfgpp.gpp)
-
-    #dfgpp["gppR2"] = np.corrcoef(dfgpp.gpp_pred, dfgpp.gpp)[0,1]**2
-    dfgpp["gppR2_no_cond"] = np.corrcoef(dfgpp.gppmax, dfgpp.gpp)[0,1]**2
-    dfgpp["gppR2_only_cond"] = np.corrcoef(dfgpp.cond, dfgpp.gpp)[0,1]**2
-#%%
-    
-    def tofit(pars):
-        basemax = pars[0]
-        t_effect = np.exp(-(airt_arr-pars[1])**2/20**2/2)
-        t_effect /= np.exp(-(25-pars[1])**2/20**2/2)
-        par_effect = (nrad_arr/275)**max(0,pars[2])
-        gppmax = t_effect*basemax*par_effect
-        gpp_pred = gppmax
-        return gpp_pred - Ngpp_arr
-    fit0 = np.array([np.max(Ngpp_arr),25,0.5])
-    cond_optres = scipy.optimize.least_squares(tofit,x0=fit0,method="lm",x_scale=np.abs(fit0))
-    pars = cond_optres.x
-    
-   
-    basemax = pars[0]
-    t_effect = np.exp(-(airt_arr-pars[1])**2/20**2/2)
-    t_effect /= np.exp(-(25-pars[1])**2/20**2/2)
-    par_effect = (nrad_arr/275)**max(0,pars[2])
-    gppmax = t_effect*basemax*par_effect
-    gpp_pred = gppmax
-    dfgpp["gpp_maxpred"] = gpp_pred*dfgpp.LAI*dfgpp.dayfrac
-    #%%
-    dfgpp["gppR2_no_cond2"] = np.corrcoef(dfgpp.gpp_maxpred, dfgpp.gpp)[0,1]**2
-
-    #dfmax = fit_gpp_flex_slope_TP_nocond(df_avg)
-    #dfmax["gppR2"] = 1- np.mean((dfmax.gpp-dfmax.gpp_pred)**2)/np.var(dfmax.gpp)
-
-
-    #%%
     lo_soil = dfgpp.waterbal < np.nanquantile(dfgpp.waterbal,0.25)
     hi_soil = dfgpp.waterbal > np.nanquantile(dfgpp.waterbal,0.75)
     cond_a3 = dfgpp.cond * np.sqrt(dfgpp.vpd) / np.sqrt(dfgpp.kgpp)
@@ -298,8 +236,9 @@ for site_id in pd.unique(df_in.SITE_ID)[:]:#[forest_daily[x] for x in [70,76]]:
     if len(dfgpp) < 10:
          continue
     #%%
-    #dfgpp["waterbal"] = 1*dfgpp.sinterp
+    #dfgpp["waterbal"] = 1*dfgpp.sinterp_anom
     dfgpp = dfgpp.loc[np.isfinite(dfgpp.waterbal)].copy()
+    #%%
     if len(dfgpp) < 10:
         continue
     #%%
@@ -332,6 +271,7 @@ for site_id in pd.unique(df_in.SITE_ID)[:]:#[forest_daily[x] for x in [70,76]]:
     if len(dfgpp) < 10:
          continue
 #%%
+    dfgpp["res_cond"] = 0.0
     #dfi = fit_tau_res(dfgpp.copy())
     dfi = fit_tau_res_assume_max(dfgpp.copy(),10)
     #dfi = fit_tau_res_width(dfgpp.copy()
@@ -339,6 +279,14 @@ for site_id in pd.unique(df_in.SITE_ID)[:]:#[forest_daily[x] for x in [70,76]]:
     dfi["max_limitation"] = np.min(dfi.et_tau/dfi.et_null)
     dfi["soil_max"] = np.max(dfi.waterbal)
     dfi["soil_min"] = np.min(dfi.waterbal)
+    #%%
+    # dfgpp_constVPD = dfgpp.copy()
+    # dfgpp_constVPD.vpd = np.mean(dfgpp_constVPD.vpd)
+    # dfi_constVPD = fit_tau_res_assume_max(dfgpp_constVPD,10)
+    # #%%
+    # dfgpp_constK = dfgpp.copy()
+    # dfgpp_constK.kgpp = np.mean(dfgpp_constK.kgpp)
+    # dfi_constK = fit_tau_res_assume_max(dfgpp_constK,10)
     #%%
     seas_plot = 0
     if seas_plot:
@@ -376,15 +324,15 @@ df1["Aridity_gs"] = df1.gs_netrad / (df1.mgsp_data / (18/1000 * 60*60*24) * 4420
 #%%
 df_tocompare = df1.copy()
 #%%
-df_tocompare = df_tocompare.loc[df_tocompare.gppR2-df_tocompare.gppR2_no_cond2 > 0.01]
-df_tocompare = df_tocompare.loc[df_tocompare.gppR2-df_tocompare.gppR2_only_cond > 0.01]
+#df_tocompare = df_tocompare.loc[df_tocompare.gppR2-df_tocompare.gppR2_no_cond2 > 0.01]
+#df_tocompare = df_tocompare.loc[df_tocompare.gppR2-df_tocompare.gppR2_only_cond > 0.01]
 #%%
 #%%
 
 df1 = df1.loc[df1.etr2_smc > 0]
 #df1 = df1.loc[df1.gppR2 > 0]
 
-df1 = df1.loc[df1.mat_data > 3]
+#df1 = df1.loc[df1.mat_data > 3]
 #%%
 def qt_gt1(x,q):
     return np.quantile(x[x >= 1],q)
@@ -438,7 +386,7 @@ rain_sites = pd.unique(df1.SITE_ID)
 ddl_rain = []
 ddl_rain2 = []
 ddl_rain10 = []
-
+gsrain = []
 rain_gs_mean = []
 rain_pos_mean = []
 for x in rain_sites:
@@ -456,6 +404,7 @@ for x in rain_sites:
     years_max = []
     years_mean = []
     years_mean10 = []
+    years_gslen = []
 
     for y in np.unique(year_list):
         #cutoff = df_meta.map_data.loc[df_meta.SITE_ID==x].iloc[0]*4
@@ -468,6 +417,7 @@ for x in rain_sites:
         years_max.append(np.max(ly))
         years_mean.append(np.mean(ly[ly >= 2]))
         years_mean10.append(np.mean(ly[ly >= 10]))
+        years_gslen.append(len(z))
 
         #years_max.append(np.max(interval_len(z,site_rain_mean/4)))
 
@@ -475,62 +425,59 @@ for x in rain_sites:
     ddl_rain.append(np.mean(years_max))
     ddl_rain2.append(np.mean(years_mean))
     ddl_rain10.append(np.mean(years_mean10))
+    gsrain.append(np.mean(years_gslen))
 
 #%%
 rain_site_tab = pd.DataFrame({"SITE_ID":rain_sites,
                               "ddrain_mean":ddl_rain,
                               "gsrain_mean":rain_gs_mean,
                               "ddrain_2mean":ddl_rain2,
-                              "ddrain_10mean":ddl_rain10})
+                              "ddrain_10mean":ddl_rain10,
+                              "gsrain_len":gsrain})
 df1 = pd.merge(df1,rain_site_tab,on="SITE_ID",how="left")
 
-#%%
 
 #%%
 df_meta = df1.copy()
 
-#%%
-#df_meta["tau_rel_unc"] = (df_meta.tau_75-df_meta.tau_25)/df_meta.tau
-#%%
-fval = ((1-df_meta.etr2_null)-(1-df_meta.etr2_smc))/(1-df_meta.etr2_smc)*(df_meta.npoints-4)
-df_meta["ftest"] = 1-scipy.stats.f.cdf(x=fval,dfn=1,dfd=df_meta.npoints-4)
+#fval = ((1-df_meta.etr2_null)-(1-df_meta.etr2_smc))/(1-df_meta.etr2_smc)*(df_meta.npoints-4)
+#df_meta["ftest"] = 1-scipy.stats.f.cdf(x=fval,dfn=1,dfd=df_meta.npoints-4)
 #df_meta = df_meta.loc[df_meta.ftest < 0.01]
 #df_meta = df_meta.loc[df_meta.LOCATION_LAT > 0]
 #df_meta = df_meta.loc[df_meta.tau_rel_unc < 0.25].copy()
-#%%
+
 df_meta = df_meta.loc[df_meta.gppR2 > 0.01].copy()
 
-df_meta = df_meta.loc[df_meta.gppR2-df_meta.gppR2_no_cond2 > 0.01]
+df_meta = df_meta.loc[df_meta.gppR2-df_meta.gppR2_no_cond > 0.01]
 df_meta = df_meta.loc[df_meta.gppR2-df_meta.gppR2_only_cond > 0.01]
-#%%
-#df_meta = df_meta.loc[df_meta.sgcor < 0.75]
-#%%
+
+#df_meta = df_meta.loc[df_meta.sgcor < 0.67]
+
 df_meta = df_meta.loc[df_meta.tau > 0]
 #df_meta = df_meta.loc[df_meta.tau_lo > 0]
 #df_meta = df_meta.loc[df_meta.tau_hi > 0]
 
-#%%
-df_meta["rel_err"] = (df_meta.etr2_smc-df_meta.etr2_null)#/(1-df_meta.etr2_null)
-#%%
 
-df_meta = df_meta.loc[df_meta.cond_lo_smc/df_meta.cond_hi_smc < 0.5]
-#%%
+df_meta["rel_err"] = (df_meta.etr2_smc-df_meta.etr2_null)#/(1-df_meta.etr2_null)
+#df_meta = df_meta.loc[df_meta.rel_err > 0.05]
+df_meta = df_meta.loc[df_meta.ancond_lo_smc/df_meta.ancond_hi_smc < 0.75]
+
 #df_meta = df_meta.loc[df_meta.DOM_DIST_MGMT != "Fire"]
 #df_meta = df_meta.loc[df_meta.DOM_DIST_MGMT != "Agriculture"]
 #df_meta = df_meta.loc[df_meta.DOM_DIST_MGMT != "Grazing"]
-#%%
+
 #df_meta = df_meta.loc[df_meta.max_limitation < 0.9]
 df_meta["soil_rel_max"] = np.clip(df_meta.soil_max/1000 - df_meta.smin,0,100)
 df_meta["soil_rel_min"] = np.clip(df_meta.soil_min/1000 - df_meta.smin,0,100)
 df_meta["soil_ratio"] = df_meta["soil_rel_min"]/df_meta["soil_rel_max"]
 #%%
-#df_meta = df_meta.loc[np.sqrt(df_meta.soil_ratio) < 0.67]
+#df_meta = df_meta.loc[np.sqrt(df_meta.soil_ratio) < 0.9]
 #%%
-#df_meta = df_meta.loc[df_meta.bcond_lo_smc/df_meta.bcond_hi_smc < 0.75]
+#df_meta = df_meta.loc[df_meta.ancond_lo_smc/df_meta.ancond_hi_smc < 0.75]
 #%%s
+#df_meta = df_meta.loc[df_meta.bcond_lo_smc/df_meta.bcond_hi_smc < 0.75]
+#%%
 rainmod = smf.ols("tau ~ ddrain_mean",data=df_meta).fit()
-
-
 #%%
 r2_11 = 1-np.mean((df_meta.ddrain_mean-df_meta.tau)**2)/np.var(df_meta.tau)
 print(r2_11)
@@ -549,8 +496,8 @@ r2_txt = "($R^2$ = " + str(np.round(rainmod.rsquared,2)) + ")"
 reg_lab = "Regression line" + "\n" + reg_eqn + "\n" + r2_txt
 line2, = ax.plot([0,lmax],np.array([0,lmax])*rainmod.params[1]+rainmod.params[0],"b--",label=reg_lab)
 #plt.plot([0,150],np.array([0,150])*reg0.params[0],"b--",label="Regression line\n($R^2$ = 0.39)")
-#leg1 = ax.legend(loc="upper left")
-leg1 = ax.legend(loc="lower right")
+leg1 = ax.legend(loc="upper left")
+#leg1 = ax.legend(loc="lower right")
 
 points_handles = []
 for i in range(len(biome_list)):
@@ -592,22 +539,6 @@ ax.plot(df_meta.LOCATION_LONG,df_meta.LOCATION_LAT,'*',alpha=0.75,color="red",ma
 ax.set_xlim(np.min(df_meta.LOCATION_LONG)-7,np.max(df_meta.LOCATION_LONG)+7)
 ax.set_ylim(np.min(df_meta.LOCATION_LAT)-7,np.max(df_meta.LOCATION_LAT)+7)
 #%%
-df_meta2 = df1.copy()
-
-df_meta2["combined_biome"] = [simple_biomes[x] for x in df_meta2["IGBP"]]
-
-df_meta2 = df_meta2.loc[df_meta2.gppR2 > 0.0].copy()
-
-df_meta2 = df_meta2.loc[df_meta2.gppR2-df_meta2.gppR2_only_cond > 0.0]
-
-#df_meta2 = df_meta2.loc[df_meta2.tau > 0]
-#df_meta = df_meta.loc[df_meta.tau_lo > 0]
-#df_meta = df_meta.loc[df_meta.tau_hi > 0]
-df_meta2 = df_meta2.loc[df_meta2.DOM_DIST_MGMT != "Fire"]
-#df_meta2 = df_meta2.loc[df_meta2.DOM_DIST_MGMT != "Agriculture"]
-#df_meta2 = df_meta2.loc[df_meta2.DOM_DIST_MGMT != "Grazing"]
-#%%
-
 fig,ax = plt.subplots(1,1,figsize=(10,8))
 
 points_handles = []
@@ -794,7 +725,9 @@ ax.set_ylabel(r"$\tau$ (days)")
 
 
 ax = axes[2,1]
-ax.scatter(df_meta.summer_end-df_meta.summer_start,df_meta.tau,c=plot_colors)
+#ax.scatter(df_meta.summer_end-df_meta.summer_start,df_meta.tau,c=plot_colors)
+ax.scatter(df_meta.gsrain_len,df_meta.tau,c=plot_colors)
+
 ax.set_xlabel("GS length (days)")
 
 fig.tight_layout()
@@ -802,7 +735,9 @@ fig.tight_layout()
 fig.legend(handles=points_handles,loc="upper center",bbox_to_anchor=(0.5,0.03),ncols=2 )
 #%%
 plt.figure(figsize=(7,7))
-plt.plot(df_meta.summer_end-df_meta.summer_start,df_meta.ddrain_mean,'o')
+#plt.plot(df_meta.summer_end-df_meta.summer_start,df_meta.ddrain_mean,'o')
+plt.plot(df_meta.gsrain_len,df_meta.ddrain_mean,'o')
+
 plt.xlabel("GS length (days)",fontsize=22)
 plt.ylabel("$D_{max}$ (days)",fontsize=22)
 #%%

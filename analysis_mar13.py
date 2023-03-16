@@ -27,7 +27,7 @@ import matplotlib as mpl
 import h5py
 #%%
 from fit_tau_res_cond2 import fit_tau_res, fit_tau_res_evi , fit_tau_res_assume_max, fit_tau_res_assume_max_smin, fit_tau_res_width
-from gpp_funs_mar13 import fit_gpp, fit_gpp_tonly
+from gpp_funs_mar13 import fit_gpp,fit_gpp3, fit_gpp_tonly, fit_gpp_nopar
 #%%
 do_bif = 0
 if do_bif:
@@ -77,13 +77,13 @@ site_result = {}
 #df_in = pd.read_csv("gs50_constGS_evi_lai.csv")
 #df_in = pd.read_csv("gs_50_laiGS_mar12b.csv")
 
-df2 = pd.read_csv("gs50_mar13_lai_evi.csv")
-df_in = pd.read_csv("gs_50_laiGS_mar13.csv")
+#df2 = pd.read_csv("gs50_mar13_lai_evi.csv")
+df_in = pd.read_csv("gs_67_laiGS_mar16.csv")
 #df_in = pd.read_csv("gs_50_laiGS_mar14_nosat.csv")
+#df_in = pd.read_csv("gs_50_laiGS_mar16.csv")
+#df_in = pd.merge(df_in,df2[["SITE_ID","EVIint","EVIside","date"]],on=["SITE_ID","date"],how='left')
 
-df_in = pd.merge(df_in,df2[["SITE_ID","EVIint","EVIside","date"]],on=["SITE_ID","date"],how='left')
-
-rain_data = pd.read_csv("rain_50_mar13.csv")
+rain_data = pd.read_csv("rain_67_mar16.csv")
 
 #%%
 #df_in = pd.read_csv("gs50_varGS_evi_lai.csv")
@@ -132,7 +132,7 @@ daytab_avg = daytab.groupby(["SITE_ID","doy_raw"]).mean(numeric_only=True).reset
 #%%
 df_in = pd.merge(df_in,daytab_avg[["SITE_ID","doy_raw","SW_IN_POT","NIGHT"]],on=["SITE_ID","doy_raw"],how="left")
 df_in = df_in.loc[np.isfinite(df_in.NIGHT)]
-#%%
+#%%site
 all_results = []
 
 for site_id in pd.unique(df_in.SITE_ID)[:]:#[forest_daily[x] for x in [70,76]]:
@@ -143,7 +143,11 @@ for site_id in pd.unique(df_in.SITE_ID)[:]:#[forest_daily[x] for x in [70,76]]:
     #dfgpp = dfgpp.loc[dfgpp.EVIside >= 0]
     #dfgpp = dfgpp.loc[dfgpp.drel_both >= 0]
     #%%
-    dfgpp = dfgpp.loc[np.isfinite(dfgpp.EVIint)]
+    
+    
+    #dfgpp = dfgpp.loc[np.isfinite(dfgpp.EVIint)]
+    #dfgpp = dfgpp.loc[np.isfinite(dfgpp.EVI2)]
+
     #%%
     if len(dfgpp) == 0:
         continue
@@ -170,28 +174,37 @@ for site_id in pd.unique(df_in.SITE_ID)[:]:#[forest_daily[x] for x in [70,76]]:
     dfgpp.dayfrac /= np.max(dfgpp.dayfrac)
     
     #dfgpp.LAI = 1*dfgpp.EVIint
-    
+    #dfgpp.LAI = 1.0
     dfgpp.LAI /= np.max(dfgpp.LAI)
+    #dfgpp = dfgpp.loc[dfgpp.LAI > 0.9]
+    #dfgpp.LAI = 1.0
+
 #    dfgpp = dfgpp.loc[dfgpp.dayfrac > 0.9]
     
     #%%
+    # dfgpp["normcond"] = dfgpp.cond/dfgpp.LAI/dfgpp.dayfrac
+    # dfgpp["normgpp"] = dfgpp.gpp/dfgpp.LAI/dfgpp.dayfrac
+    # dfgpp["normrad"] = dfgpp.par/dfgpp.dayfrac
+    # dfgpp = fit_gpp(dfgpp.copy())
+    #%%
+    #dfgpp.LAI = 1*dfgpp.EVI2
+    #dfgpp.LAI /= np.max(dfgpp.LAI)
     dfgpp["normcond"] = dfgpp.cond/dfgpp.LAI/dfgpp.dayfrac
     dfgpp["normgpp"] = dfgpp.gpp/dfgpp.LAI/dfgpp.dayfrac
     dfgpp["normrad"] = dfgpp.par/dfgpp.dayfrac
-    
-    dfgpp1 = fit_gpp_tonly(dfgpp.copy())
-    
-    dfgpp.LAI = 1*dfgpp.EVIint
-    dfgpp.LAI /= np.max(dfgpp.LAI)
-    dfgpp["normcond"] = dfgpp.cond/dfgpp.LAI/dfgpp.dayfrac
-    dfgpp["normgpp"] = dfgpp.gpp/dfgpp.LAI/dfgpp.dayfrac
-    dfgpp["normrad"] = dfgpp.par/dfgpp.dayfrac
-    dfgpp2 = fit_gpp_tonly(dfgpp.copy())
-
-    if dfgpp1.gppR2.iloc[0] > dfgpp2.gppR2.iloc[0]:
-        dfgpp = dfgpp1.copy()
-    else:
-        dfgpp = dfgpp2.copy()
+    dfgpp = fit_gpp3(dfgpp.copy())
+    #%%
+    # dfgpp.LAI = 1*dfgpp.EVI2
+    # dfgpp.LAI /= np.max(dfgpp.LAI)
+    # dfgpp["normcond"] = dfgpp.cond/dfgpp.LAI/dfgpp.dayfrac
+    # dfgpp["normgpp"] = dfgpp.gpp/dfgpp.LAI/dfgpp.dayfrac
+    # dfgpp["normrad"] = dfgpp.par/dfgpp.dayfrac
+    # dfgpp2 = fit_gpp_tonly(dfgpp.copy())
+#%%
+    # if dfgpp1.gppR2.iloc[0] > dfgpp2.gppR2.iloc[0]:
+    #     dfgpp = dfgpp1.copy()
+    # else:
+    #     dfgpp = dfgpp2.copy()
     #%%
     lo_soil = dfgpp.waterbal < np.nanquantile(dfgpp.waterbal,0.25)
     hi_soil = dfgpp.waterbal > np.nanquantile(dfgpp.waterbal,0.75)
@@ -290,15 +303,17 @@ for site_id in pd.unique(df_in.SITE_ID)[:]:#[forest_daily[x] for x in [70,76]]:
     #%%
     
     nbs = 25
-    bstau =  np.zeros(nbs)
+    bstau = np.zeros(nbs)
+   # dflist = []
     #bsmin = np.zeros(nbs)
     for bsi in range(nbs):
-        bdf = dfgpp.sample(len(dfgpp),replace=True)
-        df2 = fit_gpp_tonly(bdf)
-        df2 = df2.loc[df2.kgpp > 0]
-        #df2 = dfgpp.sample(len(dfgpp),replace=True)
+        # bdf = dfgpp.sample(len(dfgpp),replace=True)
+        # df2 = fit_gpp_nopar(bdf)
+        # df2 = df2.loc[df2.kgpp > 0]
+        df2 = dfgpp.sample(len(dfgpp),replace=True)
         df3 = fit_tau_res_assume_max(df2,10)
         bstau[bsi] = df3.tau.iloc[0]
+       # dflist.append(df3)
         #bsmin[bsi] = df3.smin.iloc[0]
         
     dfi["tau_bs_std"] = np.std(bstau)
@@ -499,7 +514,7 @@ df_meta = df1.copy()
 #df_meta = df_meta.loc[df_meta.LOCATION_LAT > 0]
 #df_meta = df_meta.loc[df_meta.tau_rel_unc < 0.25].copy()
 
-#df_meta = df_meta.loc[df_meta.gppR2 > 0.01].copy()
+df_meta = df_meta.loc[df_meta.gppR2 > 0.01].copy()
 
 #df_meta = df_meta.loc[df_meta.gppR2-df_meta.gppR2_no_cond > 0.01]
 #df_meta = df_meta.loc[df_meta.gppR2-df_meta.gppR2_only_cond > 0.01]
@@ -526,7 +541,7 @@ df_meta["soil_rel_max"] = np.clip(df_meta.soil_max/1000 - df_meta.smin,0,100)
 df_meta["soil_rel_min"] = np.clip(df_meta.soil_min/1000 - df_meta.smin,0,100)
 df_meta["soil_ratio"] = df_meta["soil_rel_min"]/df_meta["soil_rel_max"]
 #%%
-df_meta = df_meta.loc[df_meta.tau_bs_std < 25]
+df_meta = df_meta.loc[df_meta.tau_bs_std < 30]
 # df_meta = df_meta.loc[df_meta.tauTS > 0]
 # df_meta = df_meta.loc[df_meta.tau_hi > 0]
 # df_meta = df_meta.loc[df_meta.tau_lo > 0]

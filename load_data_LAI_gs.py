@@ -41,6 +41,8 @@ bif_forest = bif_forest.loc[~bif_forest.SITE_ID.isin(["IT-CA1","IT-CA3"])]
 all_daily = glob.glob("daily_data\*.csv")
 forest_daily = [x for x in all_daily if x.split("\\")[-1].split('_')[1] in list(bif_forest.SITE_ID)]
 #%%
+all_evi = pd.read_csv("evi_ndvi_allsites_sq.csv")
+
 #%%
 fig_size = plt.rcParams["figure.figsize"]
 fig_size[0] = 14
@@ -137,7 +139,58 @@ def prepare_df(fname, site_id, bif_forest):
 
     #df["SITE_ID"] = site_id
     #df = pd.merge(df,lai_piv_tab,on=["SITE_ID","month"],how='left')
+    #%%
+#    laimms = pd.read_csv("lai_2sites_modis.csv")
+#    laimms = pd.read_csv("laitest_modis_5k.csv")
+#     laimms = pd.read_csv("sqbuff_modis_lai.csv")
+# #    laimms = pd.read_csv("modis_test_sq5k.csv")
+
+#     laimms = laimms.loc[laimms.SITE_ID==site_id]
+#     laimms["datecode"] = laimms["system:index"].str.slice(stop=10)
+#     laimms["date"] = pd.to_datetime(laimms["datecode"],format="%Y_%m_%d").dt.date
     
+#     df = pd.merge(df,laimms[["date","Lai"]],on="date",how="left")
+#     lai_arr = np.array(df.Lai)
+    
+#     lai_smooth = np.nan*lai_arr
+#     sw = 15
+#     for swi in range(sw,len(lai_smooth)-sw):
+#         lai_smooth[swi] = np.nanmean(lai_arr[swi-sw:swi+sw+1])
+    
+#     df["LAI2"] = lai_smooth/10
+    #%%
+    #laimms = pd.read_csv("evi1km_test.csv")
+#    laimms = pd.read_csv("modis_test_sq5k.csv")
+#%%
+    # laimms = all_evi.loc[all_evi.SITE_ID==site_id].copy()
+    # laimms["datecode"] = laimms["system:index"].str.slice(stop=10)
+    # laimms["date"] = pd.to_datetime(laimms["datecode"],format="%Y_%m_%d").dt.date
+    # #%%
+    # df = pd.merge(df,laimms[["date","EVI"]],on="date",how="left")
+    #%%
+    # if np.sum(np.isfinite(df.EVI)) == 0:
+    #     df["EVI2"] = np.nan
+    # #%%
+    # else:
+    #     lai_arr = np.array(df.EVI)
+        
+    #     lai_int = np.interp(np.arange(len(lai_arr)),
+    #                         np.arange(len(lai_arr))[np.isfinite(lai_arr)],
+    #                         lai_arr[np.isfinite(lai_arr)],
+    #                         left=np.nan,right=np.nan)    
+    #     df["EVI2"] = lai_int/10000
+    #
+    #%%
+    # plotLAI = 1
+    # if plotLAI:
+    #     plt.figure()
+    #     plt.plot(df.date[:2000],df.LAI[:2000],'g',label="LAI"); 
+    #     plt.xlabel("Date"); plt.ylabel("MODIS LAI");
+    #     plt.plot([],[],'r',label="GPP")
+    #     plt.twinx()
+    #     gpp1 = (df.GPP_DT_VUT_REF + df.GPP_NT_VUT_REF)/2
+    #     plt.plot(df.date[:2000],gpp1[:2000],'r')
+    #     plt.ylabel(r"GPP $(\mu mol/m^2/s)$");
     #%%
     #par_summer = np.array(meancols(df,'PPFD_IN'))
     #if np.mean(np.isfinite(par_summer)) < 0.5:
@@ -237,8 +290,9 @@ def prepare_df(fname, site_id, bif_forest):
     #%%
     df["gpp_smooth"] = gpp_smooth
     #%%
-    #%%
-    year95 = df.groupby("year_new").quantile(0.95,numeric_only=True).reset_index()
+#    year95 = df.groupby("year_new").quantile(0.95,numeric_only=True).reset_index()
+    year95 = df.groupby("year_new").max(numeric_only=True).reset_index()
+
     year95["gpp_y95"] = 1*year95["gpp_smooth"]
     year95["lai_y95"] = 1*year95["LAI"]
 #%%
@@ -259,7 +313,7 @@ def prepare_df(fname, site_id, bif_forest):
     gpp_clim_smooth_raw = gpp_clim_smooth[366:366*2]
     gpp_clim_smooth = gpp_clim_smooth_raw #- np.min(gpp_clim_smooth_raw)
     topday = np.argmax(gpp_clim_smooth)
-    under50 = np.where(gpp_clim_smooth < 0.5*np.nanmax(gpp_clim_smooth))[0]
+    under50 = np.where(gpp_clim_smooth < 0.67*np.nanmax(gpp_clim_smooth))[0]
 #%%
     try:
         summer_start = under50[under50 < topday][-1]
@@ -295,9 +349,7 @@ def prepare_df(fname, site_id, bif_forest):
 #    my_clim["LE_all_c"] = fill_na(np.array(my_clim.LE_F_MDS))
     my_clim["LE_all_c"] = fill_na(np.array(my_clim.etqc))
 
-
-    dfm = pd.merge(df,my_clim[["doy_new","P_F_c","LE_all_c"]],on="doy_new",how="left")
-        
+    dfm = pd.merge(df,my_clim[["doy_new","P_F_c","LE_all_c"]],on="doy_new",how="left")        
     
     p_in = fill_na2(np.array(df.P_F),np.array(dfm.P_F_c))
     et_out = fill_na2(et_summer * 18/1000 * 60*60*24,np.array(dfm["LE_all_c"] * 18/1000 * 60*60*24))
@@ -323,12 +375,13 @@ def prepare_df(fname, site_id, bif_forest):
     #%%
     
     inflow = max(0, np.mean(et_out) - np.mean(p_in))
+    #inflow = np.mean(et_out) - np.mean(p_in)
     
     wbi = 0
     waterbal_raw = np.zeros(len(doy_summer))
     for dayi in range(len(p_in)):
         waterbal_raw[dayi] = wbi
-        wbi += p_in[dayi] - et_out[dayi] #- 1.8
+        wbi += p_in[dayi] - et_out[dayi] #+ inflow
         wbi = min(0,wbi)
         #if dayi == opposite_peak:
         #    wbi = 0
@@ -452,8 +505,14 @@ def prepare_df(fname, site_id, bif_forest):
     #%%
     df_yearmean = df.groupby("year").mean(numeric_only=True).reset_index()
     df3 = pd.merge(df,df_yearmean[["year","waterbal","smc"]],on='year',how='left')
-    
-    
+    wb_anom = np.array(df3.waterbal_x - df3.waterbal_y)
+    s_anom = np.array(df3.smc_x - df3.smc_y)
+    bothfin = np.isfinite(s_anom*wb_anom)
+    try:
+        sinterp_anom = np.interp(s_anom,np.sort(s_anom[bothfin]),np.sort(wb_anom[bothfin]))
+        sinterp_full = sinterp_anom + np.array(df3.smc_y)*np.nanstd(wb_anom)/np.nanstd(s_anom)
+    except ValueError:
+        sinterp_full = np.nan*waterbal_corr
     #%%
     df_to_fit_full = pd.DataFrame({"date":df.date,"airt":airt_summer,"year":df.year,"year_new":df.year_new,
                               "par":par_summer,"cosz":cosz,
@@ -477,6 +536,7 @@ def prepare_df(fname, site_id, bif_forest):
                               "vpd":vpd_summer,
                               "et_unc":df.LE_RANDUNC/44200,
                               "sinterp":sinterp,
+                              "sinterp_anom":sinterp_full,
                               "nee_unc":df.NEE_VUT_REF_RANDUNC,#,/-df.NEE_VUT_REF,
                               #"gpp_unc_DT":(df.GPP_DT_VUT_75-df.GPP_DT_VUT_25),#/df.GPP_DT_VUT_REF,
                               #"gpp_unc_NT":(df.GPP_NT_VUT_75-df.GPP_NT_VUT_25),#/df.GPP_NT_VUT_REF,
@@ -488,6 +548,7 @@ def prepare_df(fname, site_id, bif_forest):
 
                               "summer_end":summer_end,
                               "summer_peak":topday,
+                              #"EVI2":df.EVI2
                               #"PET":pet
                               })
     
@@ -498,7 +559,7 @@ def prepare_df(fname, site_id, bif_forest):
     df_to_fit_full["smc_iav_ratio"] = np.nanstd(df3.smc_y)/np.nanstd(df3.smc_x)
     df_to_fit_full["wb_iav_ratio"] = np.nanstd(df3.waterbal_y)/np.nanstd(df3.waterbal_x)
 
-    df_to_fit = df_to_fit_full.loc[is_summer].dropna(subset = set(df_to_fit_full.columns)-{"smc","sinterp"})
+    df_to_fit = df_to_fit_full.loc[is_summer].dropna(subset = set(df_to_fit_full.columns)-{"smc","sinterp","sinterp_anom"})
 
     df_to_fit = df_to_fit.loc[df_to_fit.par >= 100]
     
@@ -596,7 +657,7 @@ for fname in forest_daily:#[forest_daily[x] for x in [70,76]]:
     all_results.append(df_to_fit)
     #%%
 all_results = pd.concat(all_results)
-all_results.to_csv("gs_50_laiGS_mar12d.csv")
+all_results.to_csv("gs_67_laiGS_mar16.csv")
 #%%
 sites = []
 years = []
@@ -610,4 +671,4 @@ for x in rain_dict.keys():
 raindf = pd.DataFrame({"SITE_ID":np.concatenate(sites),
                       "year":np.concatenate(years),
                       "rain_mm":np.concatenate(rains)})
-raindf.to_csv("rain_all_mar12d.csv")
+raindf.to_csv("rain_67_mar16.csv")

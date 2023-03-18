@@ -302,21 +302,25 @@ for site_id in pd.unique(df_in.SITE_ID)[:]:#[forest_daily[x] for x in [70,76]]:
     #r1 = smf.wls("ga2 ~ wb2",data=dfi,weights=1/dfi.g_adj).fit()
     #%%
     
-    nbs = 25
+    nbs = 40
     bstau = np.zeros(nbs)
    # dflist = []
     #bsmin = np.zeros(nbs)
     for bsi in range(nbs):
-        # bdf = dfgpp.sample(len(dfgpp),replace=True)
-        # df2 = fit_gpp_nopar(bdf)
-        # df2 = df2.loc[df2.kgpp > 0]
-        df2 = dfgpp.sample(len(dfgpp),replace=True)
+        bdf = dfgpp.sample(len(dfgpp),replace=True)
+        df2 = fit_gpp3(bdf)
+        df2 = df2.loc[df2.kgpp > 0]
+        #df2 = dfgpp.sample(len(dfgpp),replace=True)
         df3 = fit_tau_res_assume_max(df2,10)
         bstau[bsi] = df3.tau.iloc[0]
        # dflist.append(df3)
         #bsmin[bsi] = df3.smin.iloc[0]
         
     dfi["tau_bs_std"] = np.std(bstau)
+    dfi["tau_25"] = np.quantile(bstau,0.25)
+    dfi["tau_75"] = np.quantile(bstau,0.75)
+    dfi["tau_med"] = np.quantile(bstau,0.5)
+
 #%%
     #r2 = scipy.stats.theilslopes(dfi.ga2,dfi.wb2)
     #%%
@@ -481,7 +485,7 @@ for x in rain_sites:
         z[0] = np.inf
 
        # years_max.append(np.max(get_lens(z,np.mean(site_rain_pos))))
-        ly = get_lens(z,5)
+        ly = get_lens(z,2)
         years_max.append(np.max(ly))
         years_mean.append(np.mean(ly[ly >= 2]))
         years_mean10.append(np.mean(ly[ly >= 10]))
@@ -514,7 +518,7 @@ df_meta = df1.copy()
 #df_meta = df_meta.loc[df_meta.LOCATION_LAT > 0]
 #df_meta = df_meta.loc[df_meta.tau_rel_unc < 0.25].copy()
 
-df_meta = df_meta.loc[df_meta.gppR2 > 0.01].copy()
+#df_meta = df_meta.loc[df_meta.gppR2 > 0.01].copy()
 
 #df_meta = df_meta.loc[df_meta.gppR2-df_meta.gppR2_no_cond > 0.01]
 #df_meta = df_meta.loc[df_meta.gppR2-df_meta.gppR2_only_cond > 0.01]
@@ -541,7 +545,10 @@ df_meta["soil_rel_max"] = np.clip(df_meta.soil_max/1000 - df_meta.smin,0,100)
 df_meta["soil_rel_min"] = np.clip(df_meta.soil_min/1000 - df_meta.smin,0,100)
 df_meta["soil_ratio"] = df_meta["soil_rel_min"]/df_meta["soil_rel_max"]
 #%%
-df_meta = df_meta.loc[df_meta.tau_bs_std < 30]
+df_meta = df_meta.loc[df_meta.tau_bs_std < 50]
+#df_meta = df_meta.loc[(df_meta.tau_75-df_meta.tau_25) < 50]
+
+
 # df_meta = df_meta.loc[df_meta.tauTS > 0]
 # df_meta = df_meta.loc[df_meta.tau_hi > 0]
 # df_meta = df_meta.loc[df_meta.tau_lo > 0]

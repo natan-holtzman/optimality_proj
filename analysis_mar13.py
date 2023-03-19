@@ -307,9 +307,9 @@ for site_id in pd.unique(df_in.SITE_ID)[:]:#[forest_daily[x] for x in [70,76]]:
    # dflist = []
     #bsmin = np.zeros(nbs)
     for bsi in range(nbs):
-        bdf = dfgpp.sample(len(dfgpp),replace=True)
+        bdf = dfgpp.sample(len(dfgpp),replace=True).reset_index()
         df2 = fit_gpp3(bdf)
-        df2 = df2.loc[df2.kgpp > 0]
+        #df2 = df2.loc[df2.kgpp > 0]
         #df2 = dfgpp.sample(len(dfgpp),replace=True)
         df3 = fit_tau_res_assume_max(df2,10)
         bstau[bsi] = df3.tau.iloc[0]

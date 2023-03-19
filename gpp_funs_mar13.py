@@ -143,7 +143,7 @@ def fit_gpp3(df1):
     nrad_arr = np.array(dfgpp.normrad)
     
     def tofit(pars):
-        basemax = pars[0]
+        basemax = max(0.1,pars[0])
         t_effect1 = np.exp(-(airt_arr-pars[2])**2/20**2/2)
         t_effect1 /= np.exp(-(25-pars[2])**2/20**2/2)
         par_effect = (nrad_arr/275)**max(0,pars[3])
@@ -151,7 +151,7 @@ def fit_gpp3(df1):
         
         t_effect2 = np.exp(-(airt_arr-pars[4])**2/20**2/2)
         t_effect2 /= np.exp(-(25-pars[4])**2/20**2/2)
-        slope = pars[1]*t_effect2
+        slope = max(0.1,pars[1])*t_effect2
 
         gpp_pred = gppmax*(1-np.exp(-Ncond_arr/gppmax*slope))
         return gpp_pred - Ngpp_arr
@@ -159,7 +159,7 @@ def fit_gpp3(df1):
     cond_optres = scipy.optimize.least_squares(tofit,x0=fit0,method="lm",x_scale=np.abs(fit0))
     pars = cond_optres.x
     
-    basemax = pars[0]
+    basemax = max(0.1,pars[0])
     t_effect1 = np.exp(-(airt_arr-pars[2])**2/20**2/2)
     t_effect1 /= np.exp(-(25-pars[2])**2/20**2/2)
     par_effect = (nrad_arr/275)**max(0,pars[3])
@@ -167,13 +167,14 @@ def fit_gpp3(df1):
     
     t_effect2 = np.exp(-(airt_arr-pars[4])**2/20**2/2)
     t_effect2 /= np.exp(-(25-pars[4])**2/20**2/2)
-    slope = pars[1]*t_effect2
+    slope = max(0.1,pars[1])*t_effect2
     gpp_pred = gppmax*(1-np.exp(-Ncond_arr/gppmax*slope))
     
     dfgpp["topt_max"] = pars[2]
     dfgpp["topt_slope"] = pars[4]
-    dfgpp["slope"] = pars[1]
+    dfgpp["slope"] = max(0.1,pars[1])
     dfgpp["par_coef"] = max(0,pars[3])
+    dfgpp["basemax"] = basemax
     
     dfgpp["gppmax"] = gppmax*dfgpp.LAI*dfgpp.dayfrac
     dfgpp["kgpp"] = dfgpp["gppmax"]/slope
@@ -184,32 +185,32 @@ def fit_gpp3(df1):
     #dfgpp["gppR2"] = np.corrcoef(dfgpp.gpp_pred, dfgpp.gpp)[0,1]**2
     dfgpp["gppR2_no_cond"] = np.corrcoef(dfgpp.gppmax, dfgpp.gpp)[0,1]**2
     dfgpp["gppR2_only_cond"] = np.corrcoef(dfgpp.cond, dfgpp.gpp)[0,1]**2
-#%%
+
     
-    def tofit(pars):
-        basemax = pars[0]
-        t_effect = np.exp(-(airt_arr-pars[1])**2/20**2/2)
-        t_effect /= np.exp(-(25-pars[1])**2/20**2/2)
-        par_effect = (nrad_arr/275)**max(0,pars[2])
-        gppmax = t_effect*basemax*par_effect
-        gpp_pred = gppmax
-        return gpp_pred - Ngpp_arr
-    fit0 = np.array([np.max(Ngpp_arr),25,0.5])
-    cond_optres = scipy.optimize.least_squares(tofit,x0=fit0,method="lm",x_scale=np.abs(fit0))
-    pars = cond_optres.x
+    # def tofit(pars):
+    #     basemax = pars[0]
+    #     t_effect = np.exp(-(airt_arr-pars[1])**2/20**2/2)
+    #     t_effect /= np.exp(-(25-pars[1])**2/20**2/2)
+    #     par_effect = (nrad_arr/275)**max(0,pars[2])
+    #     gppmax = t_effect*basemax*par_effect
+    #     gpp_pred = gppmax
+    #     return gpp_pred - Ngpp_arr
+    # fit0 = np.array([np.max(Ngpp_arr),25,0.5])
+    # cond_optres = scipy.optimize.least_squares(tofit,x0=fit0,method="lm",x_scale=np.abs(fit0))
+    # pars = cond_optres.x
     
    
-    basemax = pars[0]
-    t_effect = np.exp(-(airt_arr-pars[1])**2/20**2/2)
-    t_effect /= np.exp(-(25-pars[1])**2/20**2/2)
-    par_effect = (nrad_arr/275)**max(0,pars[2])
-    gppmax = t_effect*basemax*par_effect
-    gpp_pred = gppmax
-    dfgpp["gpp_maxpred"] = gpp_pred*dfgpp.LAI*dfgpp.dayfrac
+    # basemax = pars[0]
+    # t_effect = np.exp(-(airt_arr-pars[1])**2/20**2/2)
+    # t_effect /= np.exp(-(25-pars[1])**2/20**2/2)
+    # par_effect = (nrad_arr/275)**max(0,pars[2])
+    # gppmax = t_effect*basemax*par_effect
+    # gpp_pred = gppmax
+    # dfgpp["gpp_maxpred"] = gpp_pred*dfgpp.LAI*dfgpp.dayfrac
     
-    dfgpp["gppR2_no_cond2"] = np.corrcoef(dfgpp.gpp_maxpred, dfgpp.gpp)[0,1]**2
+    # dfgpp["gppR2_no_cond2"] = np.corrcoef(dfgpp.gpp_maxpred, dfgpp.gpp)[0,1]**2
     return dfgpp
-
+#%%
 
 def fit_gpp_mech(df1):
     dfgpp = df1.copy()

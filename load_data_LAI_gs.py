@@ -97,6 +97,7 @@ def fill_na2(x,y):
     x2[np.isnan(x2)] = 1*y[np.isnan(x2)]
     return x2
 #%%
+#fname = [x for x in forest_daily if site_id in x][0]
 def prepare_df(fname, site_id, bif_forest):
     #%%
     df = pd.read_csv(fname,parse_dates=["TIMESTAMP"])
@@ -162,23 +163,22 @@ def prepare_df(fname, site_id, bif_forest):
     #laimms = pd.read_csv("evi1km_test.csv")
 #    laimms = pd.read_csv("modis_test_sq5k.csv")
 #%%
-    # laimms = all_evi.loc[all_evi.SITE_ID==site_id].copy()
-    # laimms["datecode"] = laimms["system:index"].str.slice(stop=10)
-    # laimms["date"] = pd.to_datetime(laimms["datecode"],format="%Y_%m_%d").dt.date
-    # #%%
-    # df = pd.merge(df,laimms[["date","EVI"]],on="date",how="left")
+    laimms = all_evi.loc[all_evi.SITE_ID==site_id].copy()
+    laimms["datecode"] = laimms["system:index"].str.slice(stop=10)
+    laimms["date"] = pd.to_datetime(laimms["datecode"],format="%Y_%m_%d").dt.date
     #%%
-    # if np.sum(np.isfinite(df.EVI)) == 0:
-    #     df["EVI2"] = np.nan
-    # #%%
-    # else:
-    #     lai_arr = np.array(df.EVI)
+    df = pd.merge(df,laimms[["date","EVI"]],on="date",how="left")
+    if np.sum(np.isfinite(df.EVI)) == 0:
+        df["EVI2"] = np.nan
+    
+    else:
+        lai_arr = np.array(df.EVI)
         
-    #     lai_int = np.interp(np.arange(len(lai_arr)),
-    #                         np.arange(len(lai_arr))[np.isfinite(lai_arr)],
-    #                         lai_arr[np.isfinite(lai_arr)],
-    #                         left=np.nan,right=np.nan)    
-    #     df["EVI2"] = lai_int/10000
+        lai_int = np.interp(np.arange(len(lai_arr)),
+                            np.arange(len(lai_arr))[np.isfinite(lai_arr)],
+                            lai_arr[np.isfinite(lai_arr)],
+                            left=np.nan,right=np.nan)    
+        df["EVI2"] = lai_int/10000
     #
     #%%
     # plotLAI = 1
@@ -214,7 +214,7 @@ def prepare_df(fname, site_id, bif_forest):
     
     le_25 = np.array(df['LE_CORR_25']) #/ 44200 
     le_75 = np.array(df['LE_CORR_75']) #/ 44200 
-    et_summer[np.isnan(le_25*le_75)] = np.nan
+    #et_summer[np.isnan(le_25*le_75)] = np.nan
     
     myrn = np.array(meancols(df,"NETRAD"))
      
@@ -289,26 +289,29 @@ def prepare_df(fname, site_id, bif_forest):
     gpp_smooth[-swidth:] = np.mean(gpp_summer[-swidth:])
     #%%
     df["gpp_smooth"] = gpp_smooth
-    #%%
-#    year95 = df.groupby("year_new").quantile(0.95,numeric_only=True).reset_index()
-    year95 = df.groupby("year_new").max(numeric_only=True).reset_index()
+    
+    year95 = df.groupby("year_new").quantile(0.95,numeric_only=True).reset_index()
+#    year95 = df.groupby("year_new").max(numeric_only=True).reset_index()
 
     year95["gpp_y95"] = 1*year95["gpp_smooth"]
     year95["lai_y95"] = 1*year95["LAI"]
 #%%
-    yearMin = df.groupby("year_new").min(numeric_only=True).reset_index()
-    #year05["gpp_y95"] = 1*year95["gpp_smooth"]
+    yearMin = df.groupby("year_new").quantile(0.05,numeric_only=True).reset_index()
     yearMin["lai_ymin"] = 1*yearMin["LAI"]
+    yearMin["gpp_ymin"] = 1*yearMin["gpp_smooth"]
+
     #%%
-    df = pd.merge(df,year95[["year_new","gpp_y95","lai_y95"]],how="left",on="year_new")
-    #%%
-    df = pd.merge(df,yearMin[["year_new","lai_ymin"]],how="left",on="year_new")
+    df = pd.merge(df,year95[["year_new","lai_y95","gpp_y95"]],how="left",on="year_new")
+    
+    df = pd.merge(df,yearMin[["year_new","lai_ymin","gpp_ymin"]],how="left",on="year_new")
     
     #%%
 #    is_summer = df.gpp_smooth/df.gpp_y95 >= 0.5
     #is_summer = df.LAI/df.lai_y95 >= 0.75
     #is_summer_90 = df.LAI/df.lai_y95 >= 0.9
     is_summer = (df.LAI-df.lai_ymin)/(df.lai_y95-df.lai_ymin) > 0.67
+   # is_summer = (df.gpp_smooth-df.gpp_ymin)/(df.gpp_y95-df.gpp_ymin) > 0.50
+
 #%%
     gpp_clim_smooth_raw = gpp_clim_smooth[366:366*2]
     gpp_clim_smooth = gpp_clim_smooth_raw #- np.min(gpp_clim_smooth_raw)
@@ -355,62 +358,184 @@ def prepare_df(fname, site_id, bif_forest):
     et_out = fill_na2(et_summer * 18/1000 * 60*60*24,np.array(dfm["LE_all_c"] * 18/1000 * 60*60*24))
     doy_summer = np.array(df["doy_new"])
     #%%
-    #df["et_wqc"] = et_summer
+    df["et_wqc"] = et_summer
     #yearcount = df.groupby("year").count().reset_index()
 
-    if np.mean(et_out) < np.mean(p_in):
-        #inflow = 0
-        yeardf = df.groupby("year").sum(numeric_only=True).reset_index()
-        yearET = yeardf.LE_F_MDS / 44200 * (18/1000) * (60*60*24)
-        bad_year = yeardf.loc[yeardf.P_F < yearET].year
+    # if np.mean(et_out) < np.mean(p_in):
+    #     #inflow = 0
+    #     yeardf = df.groupby("year_new").sum(numeric_only=True).reset_index()
+    #     yearET = yeardf.LE_F_MDS / 44200 * (18/1000) * (60*60*24)
+    #     bad_year = yeardf.loc[yeardf.P_F < yearET].year_new
         
-        to_replace = df.year.isin(bad_year)
-        p_in[to_replace] = dfm.P_F_c[to_replace]
-        et_out[to_replace] = dfm.LE_all_c[to_replace] * 18/1000 * 60*60*24
+    #     to_replace = df.year_new.isin(bad_year)
+    #     p_in[to_replace] = dfm.P_F_c[to_replace]
+    #     et_out[to_replace] = dfm.LE_all_c[to_replace] * 18/1000 * 60*60*24
     
-    else:
-    #     inflow = np.mean(et_out) - np.mean(p_in)
-         to_replace = []
-        #return "ET exceeds P"
+    # else:
+    # #     inflow = np.mean(et_out) - np.mean(p_in)
+    #       to_replace = []
+       # return "ET exceeds P"
     #%%
+    # cbal = np.cumsum(p_in - et_out)
+    # cdiff = 0*cbal
+    # cdiff[182:-182] = (cbal[364:] - cbal[:-364])/364
     
+    #%%
     inflow = max(0, np.mean(et_out) - np.mean(p_in))
     #inflow = np.mean(et_out) - np.mean(p_in)
+    #pfrac = min(1,np.mean(et_out)/np.mean(p_in))
     
     wbi = 0
     waterbal_raw = np.zeros(len(doy_summer))
     for dayi in range(len(p_in)):
+        #if doy_summer[dayi]==1:
+        #    wbi=0
         waterbal_raw[dayi] = wbi
-        wbi += p_in[dayi] - et_out[dayi] #+ inflow
+        wbi += p_in[dayi] - et_out[dayi] #- cdiff[dayi]
         wbi = min(0,wbi)
+        #wbi -= 0.01*max(0,wbi)
         #if dayi == opposite_peak:
         #    wbi = 0
     waterbal_corr = 1*waterbal_raw
-    waterbal_corr[to_replace] = np.nan
+    #waterbal_corr[to_replace] = np.nan
+    #%%
+    # x1 = 0
+    # x2 = 0
+    
+    # waterbal_raw = np.zeros((len(doy_summer),2))
+    # #%%
+    # for dayi in range(len(p_in)):
+    #     waterbal_raw[dayi,:] = [x1,x2]
+    #     qi = 0.01*(x1-x2)
+    #     #runoff = 0.01*x1
+    #     x1 += p_in[dayi]  -qi#- runoff #- qi
+    #     x2 += qi - et_out[dayi] 
+    #     x1 = min(0,x1)
+    #     #wbi -= 0.01*max(0,wbi)
+    #     #if dayi == opposite_peak:
+    #     #    wbi = 0
+    # waterbal_corr = 1*waterbal_raw
     
     #%%
-    waterbal_corr[np.isnan(et_summer)] = np.nan
-    #%%
-    doynew_arr = np.array(df.doy_new)
-    #year_arr = np.array(df.year)
+    # waterbal_corr[np.isnan(et_summer)] = np.nan
+    # #%%
+    # doynew_arr = np.array(df.doy_new)
+    # #year_arr = np.array(df.year)
 
-    mcount = 0
-    for di in range(len(df)):
-        if doynew_arr[di] == 1:
-            mcount = 0
-        if np.isnan(waterbal_corr[di]):
-            mcount += 1
-        if mcount > 60:
-            waterbal_corr[di] = np.nan
+    # mcount = 0
+    # for di in range(len(df)):
+    #     if doynew_arr[di] == 1:
+    #         mcount = 0
+    #     if np.isnan(waterbal_corr[di]):
+    #         mcount += 1
+    #     if mcount > 60:
+    #         waterbal_corr[di] = np.nan
     #%%
     df["waterbal"] = waterbal_corr
+    #%%
+    # def avgpast(x,w):
+    #     y = 1*x
+    #     for i in range(w,len(x)):
+    #         y[i] = np.mean(x[i-w:i])
+    #     return y
+    def avgpast2(x,w):
+        y = np.zeros(len(x))
+        for i in range(w):
+            y[w:] += x[(w-i):(len(x)-i)]
+        y /= w
+        y[y==0] = np.nan
+        return y
+    #%%
+    
+    smc_summer, smc_name = lastcols(df,'SWC')
+    smc_summer = np.array(smc_summer)
+    
+    try:
+        smc_qc = np.array(df[smc_name + "_QC"])
+        smc_summer[smc_qc==0] = np.nan
+        bothgood = np.isfinite(smc_summer*waterbal_corr)
+        try:
+            sinterp = np.interp(smc_summer,np.sort(smc_summer[bothgood]),np.sort(waterbal_corr[bothgood]))
+        except ValueError:
+            sinterp = np.nan*smc_summer
+    except KeyError:
+        smc_summer = np.nan*waterbal_corr
+        sinterp = np.nan*waterbal_corr
+
+    df["smc"] = smc_summer
+    #%%
+    df_yearmean = df.groupby("year").mean(numeric_only=True).reset_index()
+    df3 = pd.merge(df,df_yearmean[["year","waterbal","smc"]],on='year',how='left')
+    wb_anom = np.array(df3.waterbal_x - df3.waterbal_y)
+    s_anom = np.array(df3.smc_x - df3.smc_y)
+    bothfin = np.isfinite(s_anom*wb_anom)
+    try:
+        sinterp_anom = np.interp(s_anom,np.sort(s_anom[bothfin]),np.sort(wb_anom[bothfin]))
+        sinterp_full = sinterp_anom + np.array(df3.smc_y)*np.nanstd(wb_anom)/np.nanstd(s_anom)
+    except ValueError:
+        sinterp_full = np.nan*waterbal_corr
+    #%%
+    
+    #%%
+    #df["smc_lag1"] = adj_smc0
+    #df2 = df.loc[df.doy_new != 366]
+    #my_clim = df2.groupby("doy_new").mean(numeric_only=True)
+    
+    # smctile = np.tile(my_clim.smc,3)
+    # wbtile = np.tile(my_clim.waterbal,3)
+    
+    # lag_cors = []
+    # for lag in range(1,180):
+    #     #print(lag)
+    #     lag_cors.append(cor_skipna2(avgpast2(smctile,lag)[366:(366*2)],wbtile[366:(366*2)]))
+    # #
+    
+    #%%
+    lag_cors = []
+    for lag in range(1,180):
+        #print(lag)
+        lag_cors.append(cor_skipna2(avgpast2(smc_summer,lag),waterbal_corr))
+    #%%
+    best_lag = range(1,180)[np.argmax(lag_cors)]
+    adj_smc0 = avgpast2(smc_summer,best_lag)
+    #%%
+    #adj_smc *= np.nanstd(waterbal_corr[np.isfinite(adj_smc)])/np.nanstd(adj_smc[np.isfinite(adj_smc)])
+    df["smc_lag1"] = adj_smc0
+    df2 = df.loc[df.doy_new != 366]
+    my_clim = df2.groupby("doy_new").mean(numeric_only=True)
+    adj_smc = adj_smc0 * np.nanstd(my_clim.waterbal)/np.nanstd(my_clim.smc_lag1)
+    # lagmat = np.zeros((len(waterbal_corr),50))
+    # for z in range(50):
+    #     lagmat[:,z] = np.interp(np.arange(len(waterbal_corr))+z,
+    #                             np.arange(len(waterbal_corr))[np.isfinite(smc_summer)],
+    #                             smc_summer[np.isfinite(smc_summer)])
+    #     #%%
+    # lagreg = sm.OLS(waterbal_corr, sm.add_constant(lagmat)).fit()
+    
+    #%%
+    
+    #then multiply by std ratio 
+    #%%
+    
+   # plt.plot(avgpast(smc_summer,80),waterbal_corr,'.')
     #ymin = df.groupby("year").min().reset_index().rename(columns={"waterbal":"wb_ymin"})
     #ymax = df.groupby("year").max().reset_index().rename(columns={"waterbal":"wb_ymin"})
-
-    #ymin
+#%%
+    # smc_smooth = np.nan*smc_summer
+    # for x in range(182,len(smc_smooth)-182):
+    #     z = smc_summer[x-182:x+183]
+    #     if np.mean(np.isfinite(z)) > 0.75:
+    #         smc_smooth[x] = np.nanmean(smc_summer[x-182:x+183])
+    # #ymin
+    # #%%
+    # wb_smooth = np.nan*smc_summer
+    # for x in range(182,len(smc_smooth)-182):
+    #     z = waterbal_corr[x-182:x+183]
+    #     if np.mean(np.isfinite(z)) > 0.75:
+    #         smc_smooth[x] = np.nanmean(smc_summer[x-182:x+183])
     #%%
     #is_summer = (doy_summer >= summer_start)*(doy_summer <= summer_end)
-    is_late_summer = is_summer #(doy_summer >= topday)*(doy_summer <= summer_end)
+    is_late_summer = (doy_summer >= topday)*(doy_summer <= summer_end)
     #%%
     
     
@@ -479,47 +604,20 @@ def prepare_df(fname, site_id, bif_forest):
     #%%
     rain_fake = 1*rain_summer
     #rain_fake[doy_summer==summer_end] = np.inf
-    rain_for_dict = [rain_fake[is_late_summer],np.array(df.year)[is_late_summer]]
+    rain_for_dict = [rain_fake[is_summer],np.array(df.year)[is_summer]]
     
     # rain_fake = 1*rain_summer
     # rain_fake[doy_summer==365] = np.inf
     # rain_for_dict = [rain_fake,np.array(df.year)]
 #%%
-
-    smc_summer, smc_name = lastcols(df,'SWC')
-    smc_summer = np.array(smc_summer)
-    
-    try:
-        smc_qc = np.array(df[smc_name + "_QC"])
-        smc_summer[smc_qc==0] = np.nan
-        bothgood = np.isfinite(smc_summer*waterbal_corr)
-        try:
-            sinterp = np.interp(smc_summer,np.sort(smc_summer[bothgood]),np.sort(waterbal_corr[bothgood]))
-        except ValueError:
-            sinterp = np.nan*smc_summer
-    except KeyError:
-        smc_summer = np.nan*waterbal_corr
-        sinterp = np.nan*waterbal_corr
-
-    df["smc"] = smc_summer
-    #%%
-    df_yearmean = df.groupby("year").mean(numeric_only=True).reset_index()
-    df3 = pd.merge(df,df_yearmean[["year","waterbal","smc"]],on='year',how='left')
-    wb_anom = np.array(df3.waterbal_x - df3.waterbal_y)
-    s_anom = np.array(df3.smc_x - df3.smc_y)
-    bothfin = np.isfinite(s_anom*wb_anom)
-    try:
-        sinterp_anom = np.interp(s_anom,np.sort(s_anom[bothfin]),np.sort(wb_anom[bothfin]))
-        sinterp_full = sinterp_anom + np.array(df3.smc_y)*np.nanstd(wb_anom)/np.nanstd(s_anom)
-    except ValueError:
-        sinterp_full = np.nan*waterbal_corr
-    #%%
+#%%
     df_to_fit_full = pd.DataFrame({"date":df.date,"airt":airt_summer,"year":df.year,"year_new":df.year_new,
                               "par":par_summer,"cosz":cosz,
                               "potpar":potpar,
                               "potpar_mean":np.nanmean(potpar),
                               "potpar_max":np.nanmax(potpar),
                               "potpar_min":np.nanmin(potpar),
+                              "smc_lag":adj_smc,
                               "cond":daily_cond,"gpp":gpp_summer,
                               "doy":doy_summer,"vpd":vpd_summer,
                               "doy_raw":np.array(df.doy),
@@ -541,14 +639,14 @@ def prepare_df(fname, site_id, bif_forest):
                               #"gpp_unc_DT":(df.GPP_DT_VUT_75-df.GPP_DT_VUT_25),#/df.GPP_DT_VUT_REF,
                               #"gpp_unc_NT":(df.GPP_NT_VUT_75-df.GPP_NT_VUT_25),#/df.GPP_NT_VUT_REF,
                               "gpp_unc":(df.GPP_DT_VUT_75-df.GPP_DT_VUT_25)/df.GPP_DT_VUT_REF,
-                              "gpp_smooth":gpp_smooth,
-                              "gpp_yq95":df.gpp_y95,
+                              #"gpp_smooth":gpp_smooth,
+                              #"gpp_yq95":df.gpp_y95,
                               #"gpp_nt" : gpp_summer_nt,
                               "summer_start":summer_start,
 
                               "summer_end":summer_end,
                               "summer_peak":topday,
-                              #"EVI2":df.EVI2
+                              "EVI2":df.EVI2
                               #"PET":pet
                               })
     
@@ -559,7 +657,7 @@ def prepare_df(fname, site_id, bif_forest):
     df_to_fit_full["smc_iav_ratio"] = np.nanstd(df3.smc_y)/np.nanstd(df3.smc_x)
     df_to_fit_full["wb_iav_ratio"] = np.nanstd(df3.waterbal_y)/np.nanstd(df3.waterbal_x)
 
-    df_to_fit = df_to_fit_full.loc[is_summer].dropna(subset = set(df_to_fit_full.columns)-{"smc","sinterp","sinterp_anom"})
+    df_to_fit = df_to_fit_full.loc[is_summer].dropna(subset = set(df_to_fit_full.columns)-{"smc","sinterp","sinterp_anom","smc_lag","EVI2"})
 
     df_to_fit = df_to_fit.loc[df_to_fit.par >= 100]
     
@@ -571,7 +669,7 @@ def prepare_df(fname, site_id, bif_forest):
 
 #    df_to_fit = df_to_fit.loc[(df_to_fit.doy >= topday)*(df_to_fit.vpd >= 0.5)].copy()
 #%%
-    #df_to_fit = df_to_fit.loc[df_to_fit.doy >= topday].copy()
+#    df_to_fit = df_to_fit.loc[df_to_fit.doy >= topday].copy()
     #df_to_fit = df_to_fit.loc[(df_to_fit.et_unc / df_to_fit.ET) <= 0.2].copy()
     #df_to_fit["gpp_unc"] = (df_to_fit["gpp_unc_DT"] + df_to_fit["gpp_unc_NT"])/2/df_to_fit.gpp
     
@@ -657,18 +755,18 @@ for fname in forest_daily:#[forest_daily[x] for x in [70,76]]:
     all_results.append(df_to_fit)
     #%%
 all_results = pd.concat(all_results)
-all_results.to_csv("gs_67_laiGS_mar16.csv")
-#%%
-sites = []
-years = []
-rains = []
-for x in rain_dict.keys():
-    ri = rain_dict[x][0]
-    sites.append(np.array([x]*len(ri)))
-    years.append(rain_dict[x][1])
-    rains.append(ri)
-#%%
-raindf = pd.DataFrame({"SITE_ID":np.concatenate(sites),
-                      "year":np.concatenate(years),
-                      "rain_mm":np.concatenate(rains)})
-raindf.to_csv("rain_67_mar16.csv")
+all_results.to_csv("gs_67_mar21_evi.csv")
+# #%%
+# sites = []
+# years = []
+# rains = []
+# for x in rain_dict.keys():
+#     ri = rain_dict[x][0]
+#     sites.append(np.array([x]*len(ri)))
+#     years.append(rain_dict[x][1])
+#     rains.append(ri)
+# #%%
+# raindf = pd.DataFrame({"SITE_ID":np.concatenate(sites),
+#                       "year":np.concatenate(years),
+#                       "rain_mm":np.concatenate(rains)})
+# raindf.to_csv("rain_67_mar21.csv")

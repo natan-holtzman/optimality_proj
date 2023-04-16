@@ -156,81 +156,22 @@ df_in = pd.merge(df_in,daytab_avg[["SITE_ID","doy_raw","SW_IN_POT","NIGHT"]],on=
 df_in = df_in.loc[np.isfinite(df_in.NIGHT)]
 #%%
 
-def get_lens(x,c):
-    x2 = 1*x
-    x2[0] = c+1
-    day_diff = np.diff(np.where(x2 > c)[0])
-    return day_diff[day_diff >= 1]
-#%%
-rain_sites = pd.unique(df_in.SITE_ID)
-ddl_rain = []
-ddl_rain2 = []
-ddl_rain10 = []
-gsrain = []
-rain_gs_mean = []
-rain_pos_mean = []
-for x in rain_sites:
-    rain_site = rain_data.loc[rain_data.SITE_ID==x].copy()
-    rain_allyear = np.array(rain_site.rain_mm)
-    year_list = np.array(rain_site.year)
-    site_rain_mean = np.mean(rain_allyear[np.isfinite(rain_allyear)])
-    site_rain_pos = rain_allyear[np.isfinite(rain_allyear)*(rain_allyear > 0)]
-    #site_rain_pos = site_rain_pos[site_rain_pos > np.quantile(site_rain_pos,0.25)]
-    #site_rain_posmean = np.mean(rain_allyear[np.isfinite(rain_allyear)*(rain_allyear > 0)])
-
-    rain_gs_mean.append(site_rain_mean)
-    #rain_pos_mean.append(site_rain_posmean)
-
-    years_max = []
-    years_mean = []
-    years_mean10 = []
-    years_gslen = []
-
-    for y in np.unique(year_list):
-        #cutoff = df_meta.map_data.loc[df_meta.SITE_ID==x].iloc[0]*4
-        z = 1*rain_allyear[year_list==y]
-        if len(z) < 10:
-            continue
-        #halflen = int(len(z)/2)
-        #z = z[halflen:]
-        z[-1] = np.inf
-        z[0] = np.inf
-
-       # years_max.append(np.max(get_lens(z,np.mean(site_rain_pos))))
-        ly = get_lens(z,5)
-        years_max.append(np.max(ly))
-        years_mean.append(np.mean(ly[ly >= 2]))
-        years_mean10.append(np.mean(ly[ly >= 10]))
-        years_gslen.append(len(z))
-
-        #years_max.append(np.max(interval_len(z,site_rain_mean/4)))
-
-
-    ddl_rain.append(np.mean(years_max))
-    ddl_rain2.append(np.mean(years_mean))
-    ddl_rain10.append(np.mean(years_mean10))
-    gsrain.append(np.mean(years_gslen))
-
-#%%
-rain_site_tab = pd.DataFrame({"SITE_ID":rain_sites,
-                              "ddrain_mean":ddl_rain,
-                              "gsrain_mean":rain_gs_mean,
-                              "ddrain_2mean":ddl_rain2,
-                              "ddrain_10mean":ddl_rain10,
-                              "gsrain_len":gsrain})
-
 def estGPP(df0):
     df = df0.copy()
     df["cond_norm"] = df.cond/df.LAI/df.dayfrac
     df["gpp_norm"] = df.gpp/df.LAI/df.dayfrac
 
     df["par_norm"] = df.par/df.dayfrac
-    hicond = np.nanquantile(df["cond_norm"],0.75)
-    dfhi = df.loc[df.cond_norm > hicond]
-    himod = smf.ols("gpp_norm ~ par_norm + airt + C(year_new)",data=dfhi,missing="drop").fit()
+    dfq3 = df.groupby("year_new").quantile(0.75,numeric_only=True).reset_index()
+    dfq3["cn75"] = 1*dfq3.cond_norm
+    df = pd.merge(df,dfq3[["year_new","cn75"]],on="year_new",how="left")
+    
+    #hicond = np.nanquantile(df["cond_norm"],0.75)
+    dfhi = df.loc[df.cond_norm > df.cn75]
+    himod = smf.ols("np.log(gpp_norm) ~ np.log(par_norm) + np.power(airt-20,2) + airt + C(year_new)",data=dfhi,missing="drop").fit()
     valid_years = pd.unique(dfhi.year_new)
     df = df.loc[df.year_new.isin(valid_years)].copy()
-    df["gppmax"] = himod.predict(df)
+    df["gppmax"] = np.exp(himod.predict(df))
     
     def tofit(k):
         interm = df.cond_norm/df.gppmax*k
@@ -242,7 +183,28 @@ def estGPP(df0):
     df["kgpp"] = df.LAI*df.dayfrac*df.gppmax/slope0
     df["gpp_pred"] = df.LAI*df.dayfrac*df.gppmax*(1-np.exp(-interm))
     df["gppR2"] = r2_skipna(df["gpp_pred"],df["gpp"])
+    
+    # def tofit(k):
+    #     interm = df.cond_norm*k
+    #     gpp_pred = df.LAI*df.dayfrac*df.gppmax*(1-np.exp(-interm))
+    #     return np.nanmean((gpp_pred-df.gpp)**2)
+    # myopt = scipy.optimize.minimize_scalar(tofit)
+    # gA = 1/myopt.x
+    # interm = df.cond_norm/gA
+    # #df["kgpp"] = df.LAI*df.dayfrac*df.gppmax/slope0
+    # df["gpp_pred_gA"] = df.LAI*df.dayfrac*df.gppmax*(1-np.exp(-interm))
+    # df["gppR2_gA"] = r2_skipna(df["gpp_pred_gA"],df["gpp"])
+    # df["gA"] = gA
+    linmod = smf.ols("np.log(gpp_norm) ~ np.log(par_norm) + np.power(airt-20,2) + airt + C(year_new)",data=df,missing="drop").fit()
+    df["linpred"] = df.LAI*df.dayfrac*np.exp(linmod.predict(df))
+    df["gppR2_lin"] = r2_skipna(df["linpred"],df["gpp"])
+    df["gpp_per_cond"] = df.gpp_norm/df.cond_norm
+    linmodC = smf.ols("np.log(gpp_per_cond) ~ np.log(par_norm) + np.power(airt-20,2) + airt + C(year_new)",data=df,missing="drop").fit()
+    df["linpredC"] = df.LAI*df.dayfrac*np.exp(linmodC.predict(df))*df.cond_norm
+    df["gppR2_linC"] = r2_skipna(df["linpredC"],df["gpp"])
     return df, himod, slope0, valid_years
+#%%
+
 #%%site
 def range_overlap(x,years):
     ystart = np.sort(pd.unique(years))[1:]
@@ -287,12 +249,13 @@ all_results = []
 #for site_id in goodsites:#[forest_daily[x] for x in [70,76]]:
 for site_id in pd.unique(bigyear.SITE_ID):
     #%%
-    if site_id=="ZM-Mon":
-        continue
+    #if site_id=="ZM-Mon":
+    #    continue
 #%%
     print(site_id)
     dfgpp = df_in.loc[df_in.SITE_ID==site_id].copy()
     dfull = bigyear.loc[bigyear.SITE_ID==site_id].copy()
+    
     #%%
     if np.max(dfull.LAI) < 0.05:
         continue
@@ -337,6 +300,9 @@ for site_id in pd.unique(bigyear.SITE_ID):
 #%%
     #dfull["is_summer"] = dfull.date.isin(dfgpp.date)
     dfull = dfull.loc[dfull.rain_qc == 1].copy()
+    dfull = dfull.loc[dfull.airt > 0].copy()
+    dfull = dfull.loc[dfull.par > 0].copy()
+
     #dfgpp = dfull.copy()
     #
     #dfgpp = dfgpp.loc[dfgpp.EVIside >= 0]
@@ -374,55 +340,29 @@ for site_id in pd.unique(bigyear.SITE_ID):
     dfgpp.cond = dfgpp.ET/dfgpp.vpd*100
     dfull.cond = dfull.ET/dfull.vpd*100
     
-    #dfgpp0 = dfgpp.copy()
-    #%%
-#     dfgpp = dfgpp.loc[dfgpp.airt > 10]
-#     dfgpp = dfgpp.loc[dfgpp.par > 100]
-#     #%%
-#     #dfgpp.LAI = (dfgpp.EVIint - np.mean(dfgpp.EVIint))/np.std(dfgpp.EVIint)*np.std(dfgpp.LAI) + np.mean(dfgpp.LAI)
-# #%%
-#     cn = 1*dfgpp.cond
-#     cn -= np.mean(cn)
-#     dfgpp = dfgpp.loc[np.abs(cn) < 3*np.std(cn)]
-    
-#     lcn = np.log(dfgpp.cond)
-#     lcn -= np.mean(lcn)
-#     dfgpp = dfgpp.loc[np.abs(lcn) < 3*np.std(lcn)]
-   
-    #%%
-    # dfgpp = dfgpp.loc[np.isfinite(dfgpp.gpp)].copy()
-    # dfgpp = dfgpp.loc[dfgpp.rain==0].copy()
-    # dfgpp = dfgpp.loc[dfgpp.vpd > 0.5].copy()
-
-    #%%
-    #dfgpp.LAI = 1*dfgpp.EVI2
-    #dfgpp.LAI /= np.max(dfgpp.LAI)
-    #dfgpp["normcond"] = dfgpp.cond/dfgpp.LAI/dfgpp.dayfrac
-    #dfgpp["normgpp"] = dfgpp.gpp/dfgpp.LAI/dfgpp.dayfrac
-    #dfgpp["normrad"] = dfgpp.par/dfgpp.dayfrac
-#    goodind = np.isfinite(dfull.cond*dfull.gpp)*(dfull.LAI > 0.25*np.nanmax(dfull.LAI))*(dfull.rain==0)*(dfull.rain_prev==0)*(dfull.vpd > 0.5)
     goodind = np.isfinite(dfull.cond*dfull.gpp)*(dfull.is_summer)*(dfull.rain==0)*(dfull.rain_prev==0)#*(dfull.vpd > 0.5)
 #%%
     dfull2 = dfull.loc[goodind].copy()
-    
-    dlin = fit_gpp_linear2(dfull2.copy())
+
     dexp, maxmod, k0, goodyears = estGPP(dfull2.copy())
     
     dfull["summer_start"] = summer_start
     dfull["summer_end"] = summer_end
     #%%
     dfull["gppR2_exp"] = dexp.gppR2.iloc[0]
-    dfull["gppR2_lin"] = dlin.gppR2.iloc[0]
+    dfull["gppR2_lin"] = dexp.gppR2_lin.iloc[0]
+    dfull["gppR2_linC"] = dexp.gppR2_linC.iloc[0]
+
     dfull["par_norm"] = dfull.par/dfull.dayfrac
     dfull = dfull.loc[dfull.year_new.isin(goodyears)].copy()
-    dfull["gppmax_norm"] = maxmod.predict(dfull)
+    dfull["gppmax_norm"] = np.exp(maxmod.predict(dfull))
     dfull["kgpp"] = dfull.LAI*dfull.dayfrac*dfull["gppmax_norm"]/k0
     #dfull["cor_gpp_pval"] = cor_skipna(dfull2.cond/dfull2.kgpp,dfull2.gpp/dfull2.gppmax).pvalue
     #%%
     #smin_mm = -500
     #tauDay = 50
     dfGS = dfull.loc[dfull.is_summer].copy()
-
+    dfull["gsrain_mean"] = np.mean(dfGS.rain)
 #    dfGS = dfull.copy()
 
 #%%
@@ -542,10 +482,7 @@ for site_id in pd.unique(bigyear.SITE_ID):
             
             #if r1.params[1] < 0 and r1.pvalues[1] < 0.05:
             if np.sum(np.isfinite(yfull*g_of_t)) >= 5: # and doyDD[0] > 150:
-                #rdd = sm.OLS(yfull,sm.add_constant(g_of_t),missing='drop').fit()
-                #if rdd.params[1] < 0 and rdd.pvalues[1] < 0.05:
                 et_over_dd.append(yfull - np.nanmean(yfull))
-                ###et_over_dd.append((yfull - np.nanmean(yfull))/np.std(g_of_t))
                 ddreg_fixed.append(g_of_t - np.mean(g_of_t[np.isfinite(yfull)]))
                 ddlabel.append([ddii]*len(yfull))
                 
@@ -554,11 +491,13 @@ for site_id in pd.unique(bigyear.SITE_ID):
                 vpd_plain.append(vpd_arr[ddstart[ddi]:ddend[ddi]])
                 et_plain.append(et_mmday[ddstart[ddi]:ddend[ddi]])
                 
-                # yfull = etnorm[ddstart[ddi]:ddend[ddi]]#[:20]
+                yfull = etnorm[ddstart[ddi]:ddend[ddi]]#[:20]
                 etsel = et_mmday_interp[ddstart[ddi]:ddend[ddi]]#[:20]
-                etcum.append(np.array([0] + list(np.cumsum(etsel)))[:-1])
-                # et_over_dd.append(yfull - np.nanmean(yfull))
-                # ddreg_fixed.append(etcum - np.mean(etcum[np.isfinite(yfull)]))
+                
+                etcumDD = np.array([0] + list(np.cumsum(etsel)))[:-1]
+                etcum.append(etcumDD)
+                #et_over_dd.append(yfull - np.nanmean(yfull))
+                #ddreg_fixed.append(etcumDD - np.mean(etcumDD[np.isfinite(yfull)]))
                 ddii += 1
         #%%
     if len(ddreg_fixed) == 0:
@@ -678,10 +617,6 @@ def get_lens2(x,c):
     return day_diff
 
 #%%
-#rain_data = pd.read_csv("rain_all_mar2.csv")
-df1 = pd.merge(df1,rain_site_tab,on="SITE_ID",how="left")
-
-
 #%%
 df_meta = df1.copy()
 
@@ -690,41 +625,16 @@ df_meta = df1.copy()
 #df_meta = df_meta.loc[df_meta.ftest < 0.01]
 #df_meta = df_meta.loc[df_meta.LOCATION_LAT > 0]
 #df_meta = df_meta.loc[df_meta.tau_rel_unc < 0.25].copy()
-udf = all_results.groupby("SITE_ID").nunique().reset_index()
-udf["nyears"] = 1*udf["year"]
-df_meta = pd.merge(df_meta,udf[["SITE_ID","nyears"]],on="SITE_ID",how="left")
-#df_meta = df_meta.loc[df_meta.gppR2 > 0.01].copy()
-
-#df_meta = df_meta.loc[df_meta.gppR2-df_meta.gppR2_no_cond > 0.01]
-#df_meta = df_meta.loc[df_meta.gppR2-df_meta.gppR2_only_cond > 0.01]
-
-#df_meta = df_meta.loc[df_meta.etr2_smc > 0]
-
-#df_meta = df_meta.loc[df_meta.tau > 0]
-#df_meta = df_meta.loc[df_meta.tau_lo > 0]
-#df_meta = df_meta.loc[df_meta.tau_hi > 0]
-
-
-#df_meta["rel_err"] = (df_meta.etr2_smc-df_meta.etr2_null)#/(1-df_meta.etr2_null)
-#df_meta = df_meta.loc[df_meta.rel_err > 0.05]
-#df_meta = df_meta.loc[df_meta.ancond_lo_smc/df_meta.ancond_hi_smc < 0.75]
-#df_meta = df_meta.loc[df_meta.bcond_lo_smc/df_meta.bcond_hi_smc < 0.67]
-
-#df_meta = df_meta.loc[df_meta.DOM_DIST_MGMT != "Fire"]
-#df_meta = df_meta.loc[df_meta.DOM_DIST_MGMT != "Agriculture"]
-#df_meta = df_meta.loc[df_meta.DOM_DIST_MGMT != "Grazing"]
-
-#df_meta = df_meta.loc[df_meta.nE_lo_smc/df_meta.nE_hi_smc < 0.8]
-#df_meta = df_meta.loc[df_meta.max_limitation < 0.9]
-#df_meta["soil_rel_max"] = np.clip(df_meta.soil_max/1000 - df_meta.smin,0,100)
-#df_meta["soil_rel_min"] = np.clip(df_meta.soil_min/1000 - df_meta.smin,0,100)
-#df_meta["soil_ratio"] = df_meta["soil_rel_min"]/df_meta["soil_rel_max"]
+#udf = all_results.groupby("SITE_ID").nunique().reset_index()
+#udf["nyears"] = 1*udf["year"]
+#df_meta = pd.merge(df_meta,udf[["SITE_ID","nyears"]],on="SITE_ID",how="left")
 #%%
 df_meta = pd.merge(df_meta,metadata,left_on="SITE_ID",right_on="fluxnetid",how="left")
 #%%
 #df_meta = df_meta.loc[df_meta["cor_gpp_pval"] < 0.05]
 #%%
 df_meta = df_meta.loc[df_meta.gppR2_exp - df_meta.gppR2_lin > 0]
+df_meta = df_meta.loc[df_meta.gppR2_exp - df_meta.gppR2_linC > 0]
 
 #df_meta = df_meta.loc[df_meta.gppR2_base - df_meta.gppR2_only_cond > 0.05]
 #df_meta = df_meta.loc[df_meta.gppR2_base - df_meta.gppR2_no_cond > 0.05]
@@ -733,12 +643,12 @@ df_meta = df_meta.loc[df_meta.tau_ddreg_lo > 0]
 df_meta = df_meta.loc[df_meta.tau_ddreg_hi > 0]
 #%%
 #df_meta = df_meta.loc[(df_meta.tau_hi-df_meta.tau_lo)/df_meta.tau_reg < 0.75]
-df_meta = df_meta.loc[df_meta.tau_rel_err < 0.25]
+#df_meta = df_meta.loc[df_meta.tau_rel_err < 0.25]
 
-#df_meta = df_meta.loc[(df_meta.tau_ddreg_hi-df_meta.tau_ddreg_lo)/ df_meta.tau_ddreg < 1]
+df_meta = df_meta.loc[(df_meta.tau_ddreg_hi-df_meta.tau_ddreg_lo)/ df_meta.tau_ddreg < 1]
 #%%
-df_meta["ddrain_mean"] = 1*df_meta.seas_rain_max5
-df_meta["ddrain_2mean"] = 1*df_meta.seas_rain_mean5
+df_meta["ddrain_mean"] = 1*df_meta.seas_rain_max0
+df_meta["ddrain_2mean"] = 1*df_meta.seas_rain_mean0
 #%%
 df_meta["gsrain_len"] = df_meta.summer_end - df_meta.summer_start
 #%%
@@ -871,14 +781,14 @@ ax.set_ylabel(r"$R^2$ of g",fontsize=24)
 #ax.axhline(0,color='k')
 
 
-df_meta3 = df_meta.sort_values("gppR2_b")
+df_meta3 = df_meta.sort_values("gppR2_exp")
 df_meta3["gpp_rank"] = np.arange(len(df_meta3))
 ax = axes[2]
 points_handles = []
 for i in range(len(biome_list)):
     subI = df_meta3.loc[df_meta3.combined_biome==biome_list[i]]
     if len(subI) > 0:
-        pointI, = ax.plot(subI.gpp_rank,subI.gppR2_b,'o',alpha=0.75,markersize=10,color=mpl.colormaps["tab10"](i+2),label=biome_list[i])
+        pointI, = ax.plot(subI.gpp_rank,subI.gppR2_exp,'o',alpha=0.75,markersize=10,color=mpl.colormaps["tab10"](i+2),label=biome_list[i])
         points_handles.append(pointI)
 
 #ax.set_xlim(0,250)
@@ -889,40 +799,7 @@ fig.tight_layout()
 fig.legend(handles=points_handles,loc="upper center",bbox_to_anchor=(0.5,0.02),ncols=2)
 #ax.vlines(df_meta.ddrain_mean,df_meta.tau_75,df_meta.tau_25,color="k")
 #%%
-# plt.figure(figsize= (10,10))
-# plt.subplot(2,1,1)
-# plt.plot(all_results.drel_both, np.log(all_results.gpp/all_results.gpp_pred),'.',alpha=0.1); 
-# plt.ylim(-1,1);
-# plt.xlim(-2,2);
 
-# plt.ylabel("log GPP error")
-# plt.subplot(2,1,2)
-# plt.plot(all_results.drel_both, np.log(all_results.ET/all_results.et_tau),'.',alpha=0.1); 
-# plt.ylim(-1,1);
-# plt.xlim(-2,2);
-# plt.ylabel("log ET error")
-
-# plt.xlabel("Day relative to growing season peak")
-#%%
-# lerr_gpp = np.log(all_results.gpp/all_results.gpp_pred)
-# lerr_et = np.log(all_results.ET/all_results.et_tau)
-# ok_err = (np.abs(lerr_gpp) < 0.5)*(np.abs(lerr_et) < 0.5)
-# print(cor_skipna(lerr_gpp[ok_err],lerr_et[ok_err]))
-#%%
-# plt.figure()
-# plt.plot(lerr_gpp, lerr_et,'.',alpha=0.1); 
-# plt.ylim(-1,1)
-# plt.xlim(-1,1)
-# plt.xlabel("log GPP error")
-# plt.ylabel("log ET error")
-
-#%%
-
-#plt.figure()
-#plt.plot(all_results.gpp-all_results.gpp_pred, all_results.ET-all_results.et_tau,'.',alpha=0.1); 
-#%%
-# plt.ylim(-1,1)
-# plt.xlim(-1,1)
 #%%
 biome_index = dict(zip(biome_list,range(len(biome_list))))
 df_meta["biome_number"] = [biome_index[x] for x in df_meta.combined_biome]
@@ -975,7 +852,7 @@ plt.ylabel("$D_{max}$ (days)",fontsize=22)
 #df_meta = df_meta.loc[df_meta.summer_end-df_meta.summer_start < 300]
 #%%
 #plt.plot(df_meta.summer_end-df_meta.summer_peak, df_meta.tau,'o')
-all_results = pd.merge(all_results,rain_site_tab,on="SITE_ID",how="left")
+#all_results = pd.merge(all_results,rain_site_tab,on="SITE_ID",how="left")
 #%%
 # Blo_tab = pd.DataFrame({"ET":etrec[17],"v_gA":frec[17]})
 # #%%

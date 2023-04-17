@@ -173,14 +173,18 @@ def estGPP(df0):
     df = df.loc[df.year_new.isin(valid_years)].copy()
     df["gppmax"] = np.exp(himod.predict(df))
     
-    def tofit(k):
-        interm = df.cond_norm/df.gppmax*k
-        gpp_pred = df.LAI*df.dayfrac*df.gppmax*(1-np.exp(-interm))
-        return np.nanmean((gpp_pred-df.gpp)**2)
-    myopt = scipy.optimize.minimize_scalar(tofit)
-    slope0 = myopt.x
-    interm = df.cond_norm/df.gppmax*slope0
-    df["kgpp"] = df.LAI*df.dayfrac*df.gppmax/slope0
+    df["yL0"] = np.log(-np.log(1-df.gpp_norm/df.gppmax)) - np.log(df.cond_norm)
+    m30 = smf.ols("yL0 ~ np.log(par_norm) + airt + np.power(airt-20,2) + C(year_new)",data=df,missing="drop").fit()
+    k0full = m30.predict(df)
+    kg3 = 1/np.exp(k0full)
+    # def tofit(k):
+    #     interm = df.cond_norm/df.gppmax*k
+    #     gpp_pred = df.LAI*df.dayfrac*df.gppmax*(1-np.exp(-interm))
+    #     return np.nanmean((gpp_pred-df.gpp)**2)
+    # myopt = scipy.optimize.minimize_scalar(tofit)
+    # slope0 = myopt.x
+    interm = df.cond_norm/kg3
+    df["kgpp"] = df.LAI*df.dayfrac*kg3
     df["gpp_pred"] = df.LAI*df.dayfrac*df.gppmax*(1-np.exp(-interm))
     df["gppR2"] = r2_skipna(df["gpp_pred"],df["gpp"])
     
@@ -202,7 +206,7 @@ def estGPP(df0):
     linmodC = smf.ols("np.log(gpp_per_cond) ~ np.log(par_norm) + np.power(airt-20,2) + airt + C(year_new)",data=df,missing="drop").fit()
     df["linpredC"] = df.LAI*df.dayfrac*np.exp(linmodC.predict(df))*df.cond_norm
     df["gppR2_linC"] = r2_skipna(df["linpredC"],df["gpp"])
-    return df, himod, slope0, valid_years
+    return df, himod, m30, valid_years
 #%%
 
 #%%site
@@ -227,20 +231,6 @@ bigyear = pd.read_csv("all_yearsites.csv")
 bigyear = pd.merge(bigyear,bif_forest,on="SITE_ID",how='left')
 
 bigyear["combined_biome"] = [simple_biomes[x] for x in bigyear["IGBP"]]
-
-#%%
-# goodsites = ['AU-Ade', 'AU-Cpr', 'AU-Dry', 'AU-Emr', 'AU-Gin', 'AU-Stp',
-#        'AU-TTE', 'CA-Oas', 'CA-TP4', 'CN-Du2', 'ES-LJu', 'IT-Noe',
-#        'NL-Loo', 'SD-Dem', 'US-AR1', 'US-AR2', 'US-Blo', 'US-Cop',
-#        'US-Me2', 'US-Me3', 'US-Me5', 'US-Me6', 'US-NR1', 'US-SRC',
-#        'US-SRG', 'US-SRM', 'US-UMB', 'US-UMd', 'US-Var', 'US-Whs',
-#        'US-Wkg']
-goodsites = ['AU-ASM', 'AU-DaS', 'AU-Dry', 'AU-Emr', 'AU-GWW', 'AU-Gin',
-       'CN-Cng', 'ES-LJu', 'FI-Hyy', 'IT-Noe', 'IT-SRo', 'NL-Loo',
-       'SD-Dem', 'US-AR1', 'US-AR2', 'US-Blo', 'US-Cop', 'US-Goo',
-       'US-IB2', 'US-Me2', 'US-Me3', 'US-Me5', 'US-Me6', 'US-NR1',
-       'US-SRC', 'US-SRG', 'US-SRM', 'US-Ton', 'US-Var', 'US-Whs',
-       'US-Wkg']
 
 #%%
 all_results = []
@@ -344,7 +334,7 @@ for site_id in pd.unique(bigyear.SITE_ID):
 #%%
     dfull2 = dfull.loc[goodind].copy()
 
-    dexp, maxmod, k0, goodyears = estGPP(dfull2.copy())
+    dexp, maxmod, slopemod, valid_years = estGPP(dfull2.copy())
     
     dfull["summer_start"] = summer_start
     dfull["summer_end"] = summer_end
@@ -354,9 +344,10 @@ for site_id in pd.unique(bigyear.SITE_ID):
     dfull["gppR2_linC"] = dexp.gppR2_linC.iloc[0]
 
     dfull["par_norm"] = dfull.par/dfull.dayfrac
-    dfull = dfull.loc[dfull.year_new.isin(goodyears)].copy()
+    dfull = dfull.loc[dfull.year_new.isin(valid_years)].copy()
     dfull["gppmax_norm"] = np.exp(maxmod.predict(dfull))
-    dfull["kgpp"] = dfull.LAI*dfull.dayfrac*dfull["gppmax_norm"]/k0
+    dfull["kgpp"] = dfull.LAI*dfull.dayfrac/np.exp(slopemod.predict(dfull))
+    dfull["gpp_pred"] = dfull.LAI*dfull.dayfrac*dfull.gppmax_norm * (1-np.exp(-dfull.cond/dfull.LAI/dfull.dayfrac/dfull.kgpp))
     #dfull["cor_gpp_pval"] = cor_skipna(dfull2.cond/dfull2.kgpp,dfull2.gpp/dfull2.gppmax).pvalue
     #%%
     #smin_mm = -500
@@ -633,8 +624,8 @@ df_meta = pd.merge(df_meta,metadata,left_on="SITE_ID",right_on="fluxnetid",how="
 #%%
 #df_meta = df_meta.loc[df_meta["cor_gpp_pval"] < 0.05]
 #%%
-df_meta = df_meta.loc[df_meta.gppR2_exp - df_meta.gppR2_lin > 0]
-df_meta = df_meta.loc[df_meta.gppR2_exp - df_meta.gppR2_linC > 0]
+#df_meta = df_meta.loc[df_meta.gppR2_exp - df_meta.gppR2_lin > 0]
+#df_meta = df_meta.loc[df_meta.gppR2_exp - df_meta.gppR2_linC > 0]
 
 #df_meta = df_meta.loc[df_meta.gppR2_base - df_meta.gppR2_only_cond > 0.05]
 #df_meta = df_meta.loc[df_meta.gppR2_base - df_meta.gppR2_no_cond > 0.05]

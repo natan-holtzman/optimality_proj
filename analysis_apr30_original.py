@@ -158,8 +158,8 @@ df_in = df_in.loc[np.isfinite(df_in.NIGHT)]
 #%%
 #bigyear = pd.read_csv("all_yearsites.csv")
 
-bigyear = pd.read_csv("hourly_gs_data_fullyear_parMM.csv")
-#bigyear = pd.read_csv("hourly_gs_data_lai75d_parMM.csv")
+#bigyear = pd.read_csv("hourly_gs_data_fullyear_parMM.csv")
+bigyear = pd.read_csv("hourly_gs_data_lai75d_parMM.csv")
 #bigyear = pd.read_csv("hourly_gs_data_lai75b_parMM.csv")
 
 gppD = np.array(bigyear.gpp_dt+bigyear.gpp_nt)/2
@@ -193,6 +193,14 @@ for site_id in pd.unique(bigyear.SITE_ID):
     dfull = bigyear.loc[bigyear.SITE_ID==site_id].copy()
     dyear = fullyear.loc[fullyear.SITE_ID==site_id].copy()
     dfull.loc[dfull.gpp <= 0,"ET"] = np.nan
+    #%%
+    smc1 = np.array(dyear.smc)
+    smcsmooth = 0*smc1  
+    awin = 80
+    for i in range(awin):
+        smcsmooth[i:len(smc1)-awin+i] += smc1[:-awin]/awin
+    smcsmooth[:awin] = np.nan
+    smcsmooth[-awin:] = np.nan
     #%%
     z1 = np.array(dyear.rain)
     y1 = np.array(dyear.year_new)
@@ -246,13 +254,12 @@ for site_id in pd.unique(bigyear.SITE_ID):
         waiting[j] = np.where(z2[j:] > 0)[0][0]
     #%%
     dfull["wait_gsend_mean"] = np.mean(waiting[dormant==0])
-    #%%
-    #%%
+    
     dfull["wait_GPPw"] = np.sum(waiting*GPP1)/np.sum(GPP1)
     dfull["wait_LAIw"] = np.sum(waiting*(L1))/np.sum(L1)
-    #%%
+    
     dyear["wt"] = waiting
-    #%%
+    
     yearmax = dyear.loc[dormant==0].groupby("year_new").max(numeric_only=True).reset_index()
     dfull["wait_gsend_max"] = np.mean(yearmax.wt)
     # if np.mean(dfull.gpp) < 1:
@@ -380,7 +387,8 @@ for site_id in pd.unique(bigyear.SITE_ID):
     dfGS = dfull.loc[dfull.is_summer].copy()
     dfull["gsrain_mean"] = np.mean(dfGS.rain)
 #    dfGS = dfull.copy()
-
+    #dfGS["cond_per_LAI"] = dfGS.cond/dfGS.LAI
+    #cl75 =  np.nanquantile(dfGS["cond_per_LAI"],0.75)
 #%%
     seaslens = []
     ddreg_fixed = []
@@ -450,13 +458,14 @@ for site_id in pd.unique(bigyear.SITE_ID):
                             doy_indata[np.isfinite(et_mmday)],
                             et_mmday[np.isfinite(et_mmday)])
         # w_arr = np.array(dfy.waterbal)
-        cond1 = np.array(dfy.cond)
-        #et_mmday[cond1 > 0.17] = np.nan
+        
+        #cond1 = np.array(dfy.cond_per_LAI)
+        #et_mmday[cond1 > cl75] = np.nan
         
         #et_mmday[dfy.airt < 10] = np.nan
         #et_mmday[dfy.par < 100] = np.nan
 
-        #et_mmday[dfy.vpd < 0.5] = np.nan
+        et_mmday[dfy.vpd < 0.5] = np.nan
         
         #et_mmday[dfy.ET_qc < 0.5] = np.nan
         
@@ -513,52 +522,16 @@ for site_id in pd.unique(bigyear.SITE_ID):
             etsel = et_mmday_interp[starti:endi]#[:20]
             rainsel =  rain_arr[starti:endi]
             #if r1.params[1] < 0 and r1.pvalues[1] < 0.05:
-            if np.sum(np.isfinite(yfull)) >= 5 and np.mean(np.isfinite(yfull)) >= 0.75:
+            if np.sum(np.isfinite(yfull)) >= 5: # and np.mean(np.isfinite(yfull)) >= 0.75:
                 #et_over_dd.append(yfull - np.nanmean(yfull))
                 #ddreg_fixed.append(g_of_t - np.mean(g_of_t[np.isfinite(yfull)]))
                 etcumDD = np.array([0] + list(np.cumsum(etsel-rainsel)))[:-1]
 
-                #rDD = sm.OLS(yfull,sm.add_constant(etcumDD),missing='drop').fit()
+                rDD = sm.OLS(yfull,sm.add_constant(etcumDD),missing='drop').fit()
 #                rDD = sm.OLS(yfull,sm.add_constant(g_of_t),missing='drop').fit()
 
-
-                rsqval = []
-                for ib in range(len(etcumDD)):
-                    xpred = sm.add_constant(np.clip(etcumDD-etcumDD[ib],0,np.inf))
-                    regi = sm.OLS(yfull, xpred, missing='drop').fit()
-                    rsqval.append(regi.rsquared)
-                ib = np.argmax(rsqval)-1
-                #xpred = sm.add_constant(np.clip(etcumDD-etcumDD[ib],0,np.inf))
-                #regi = sm.OLS(yfull, xpred, missing='drop').fit()
-                
-                if len(yfull[ib:]) < 5:
-                    continue
-                
-                rDD = sm.OLS(yfull[ib:],sm.add_constant(etcumDD[ib:]),missing='drop').fit()
-
-
                 if rDD.pvalues[1] < 0.05 and rDD.params[1] < 0:
-                    
-                    
-                    starti = ddstart[ddi] + ib
-                    endi = ddend[ddi]
-                    #endi = min(starti+20,ddend[ddi])
-                    f_of_t = (vpd_arr*k_mm_day)[starti:endi]
-        #           # g_of_t = np.cumsum(np.sqrt(f_of_t))
-        #            g_of_t = np.array([0] + list(np.cumsum(np.sqrt(f_of_t))))[:-1]
-                    g_of_t = np.array([0] + list(np.cumsum(np.sqrt(f_of_t))))[:-1]
-                    #g_of_t = g_of_t[:20]
-                    #yfull = et_mmday[ddstart[ddi]:ddend[ddi]]/np.sqrt(f_of_t)
-                    #yfull = yfull[:20]
-                    
-                    doyDD = doyY[starti:endi]
-                    yfull = etnorm[starti:endi]#[:20]
-                    etsel = et_mmday_interp[starti:endi]#[:20]
-                    rainsel =  rain_arr[starti:endi]
-                    
-                    etcumDD = np.array([0] + list(np.cumsum(etsel-rainsel)))[:-1]
-
-                    
+                                       
                     
                     ddlabel.append([ddii]*len(yfull))
                     ddyears.append([y0]*len(yfull))
@@ -587,6 +560,8 @@ for site_id in pd.unique(bigyear.SITE_ID):
     row0 = np.concatenate(ddreg_fixed)
     et_topred = np.concatenate(et_over_dd)
     et_topred[np.abs(et_topred) > np.nanstd(et_topred)*3] = np.nan
+    #et_topred[np.abs(row0) > np.nanstd(row0[np.isfinite(et_topred)])*3] = np.nan
+
     if np.sum(np.isfinite(et_topred*row0)) < 10:
         continue
     #%%
@@ -651,6 +626,17 @@ for site_id in pd.unique(bigyear.SITE_ID):
     dmod = smf.ols("et2 ~ 0 + etcum:F2 + C(ddi):F2",data=btab,missing='drop').fit()
     dmod0 = smf.ols("et2 ~ 0 + C(ddi):F2",data=btab,missing='drop').fit()
     #%%
+    # cutoff = 300
+    # btab3 = btab2.loc[btab2.cond < cutoff].copy()
+    # dmod = smf.ols("et2 ~ 0 + etcum:F2 + C(ddi):F2",data=btab3,missing='drop').fit()
+    # ddpresent = btab2.ddi.isin(pd.unique(btab3.ddi))
+    # etmax = btab2.VPD*cquant[j]
+    # dpred = 1*etmax
+    # dpred[ddpresent] = np.sqrt(dmod.predict(btab2.loc[ddpresent]))
+    # dpred = np.clip(dpred,0,etmax)
+    # mses.append(np.nanmean(np.abs(dpred-btab2.ET)))
+    
+    #%%
     ddlist.append(btab)
     # dfull["etnorm_r2"] = cmod.rsquared
     # dfull["etnorm_r2_0"] = cmod0.rsquared
@@ -670,7 +656,14 @@ for site_id in pd.unique(bigyear.SITE_ID):
     # btab = pd.merge(btab,ddfirst[["ddi","ETinit","Finit"]],on='ddi',how='left')
     # #%%
     # btab["b_init"] = (btab.ETinit/btab.Finit)
-#%%
+#%%tau = -2/r1.params[0]
+    etnorm = (dfull.ET*mol_s_to_mm_day)**2 / (dfull.vpd/100) / (dfull.gA_daily*mol_s_to_mm_day)
+    etnorm[dfull.par < 100] = np.nan
+    etnorm[dfull.vpd < 0.5] = np.nan
+    etnorm[dfull.rain > 0] = np.nan
+    etnorm[dfull.rain_prev > 0] = np.nan
+    s_inv = etnorm*tau/2
+    #s_inv2 = nanterp(np.array(s_inv))
     # dfgpp0["etpred_newmod_mmday"] = etrec
     # dfi = pd.merge(dfi,dfgpp0[["date","etpred_newmod_mmday"]],on="date",how="left")
     # dfi["etr2_reg"] = 1- np.nanmean((dfgpp0.ET-dfgpp0.etpred_newmod_mmday/mol_s_to_mm_day)**2)/np.nanvar(dfgpp0.ET)

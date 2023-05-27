@@ -194,8 +194,12 @@ for site_id in pd.unique(bigyear.SITE_ID):
 
     dfull["cond2"] = dfull.ET/np.clip(dfull.vpd_daytime,0.1,np.inf)*100
 
-    dfull["gpp_pred"] = dfull.amax_hourly*(1 - np.exp(-dfull.cond2/dfull.gA_hourly))
-    dfull["gpp_pred_const"] = dfull.amax_hourly*(1 - np.exp(-np.mean(dfull.cond2)/dfull.gA_hourly))
+    #dfull["gpp_pred"] = dfull.amax_hourly*(1 - np.exp(-dfull.cond2/dfull.gA_hourly))
+    #dfull["gpp_pred_const"] = dfull.amax_hourly*(1 - np.exp(-np.mean(dfull.cond2)/dfull.gA_hourly))
+
+    dfull["gpp_pred"] = dfull.amax_daily*(1 - np.exp(-dfull.cond2/dfull.gA_daily))
+    dfull["gpp_pred_const"] = dfull.amax_daily*(1 - np.exp(-np.mean(dfull.cond2)/dfull.gA_daily))
+
 
     #daymod = smf.ols("np.log(gpp/gpp_pred) ~ doy + np.power(doy,2)",data=dfull,missing='drop').fit()
 
@@ -508,7 +512,7 @@ for site_id in pd.unique(bigyear.SITE_ID):
 
     #dmod = smf.ols("et2 ~ 0 + etcum:F2 + C(ddi):F2",data=tab2,missing='drop').fit()
     #epredM = np.sqrt(np.clip(dmod.predict(tab2),0,np.inf))
-
+    btab["etpred"] = epredN
     dfull["etr2_norm"] = r2_skipna(epredN/tab2.et_init,tab2.ET/tab2.et_init)
     dfull["gr2_norm"] = r2_skipna(epredN/tab2.VPD/tab2.g_init,tab2.cond/tab2.g_init)
     dfull["tau_simult"] = -2/dmod.params[0]
@@ -692,7 +696,7 @@ for i in range(len(biome_list)):
 
 #ax.set_xlim(0,210)
 #ax.set_ylim(0,210)
-ax.set_xlabel("Average temperature ($^oC$",fontsize=24)
+ax.set_xlabel("Average temperature ($^oC)$",fontsize=24)
 ax.set_ylabel("Average annual precip. (cm)",fontsize=24)
 
 fig.legend(handles=points_handles,loc="upper center",bbox_to_anchor=(0.5,0.03),ncols=2 )
@@ -1004,7 +1008,9 @@ mSite2rain = smf.ols("etnorm ~ etcum:slopefac + np.power(etcum,2):slopefac +  C(
 # # c1 = np.sqrt(sm0*4)
 # # c2 = 0.5*c1*np.sqrt(2/tau)
 # epred20 = np.clip(term1 + c2*tab2.F,0,np.inf)
+from statsmodels.stats.anova import anova_lm
 
+biome_diff = anova_lm(smf.ols("tau_ddreg ~ C(combined_biome)",data=df_meta).fit())
 
 
 #%%

@@ -33,6 +33,7 @@ vpd_range = np.linspace(0.5,3,500)
 tau_day = 30
 tau_s = tau_day*(60*60*24)
 zsoil_mol = 1000*1000/18
+zsoil_mm = 1000
 s_above_wilt = 0.2
 new_opt_g = np.sqrt(2/tau_s*vmax/slope_at_0*zsoil_mol*s_above_wilt/(vpd_range/100))
 #%%
@@ -104,9 +105,9 @@ med_g[med_g < 0] = 0
 
 #%%
 ax = axes[0,1]
-ax.plot(s_sw_range,new_opt_g,"r",label="Time-integrated",linewidth=3); 
-ax.plot(s_sw_range,med_g,"k--",label=r"Medlyn",linewidth=3)
-ax.set_xlabel("Soil moisture above wilting point")
+ax.plot(s_sw_range*zsoil_mm,new_opt_g,"r",label="Time-integrated",linewidth=3); 
+ax.plot(s_sw_range*zsoil_mm,med_g,"k--",label=r"Medlyn",linewidth=3)
+ax.set_xlabel("s - $s_w$ (mm)")
 ax.set_ylabel("g $(mol/m^2/s)$")
 ax.set_title("(b)",loc="left")
 
@@ -138,9 +139,9 @@ allmax = np.round(max(np.max(new_opt_g),np.max(med_g)),1)
 
 
 ax = axes[1,0]
-pcm = ax.pcolormesh(vpd_range,s_sw_range,new_opt_g,vmin=0,vmax=allmax)
+pcm = ax.pcolormesh(vpd_range,s_sw_range*zsoil_mm,new_opt_g,vmin=0,vmax=allmax)
 ax.set_xlabel("VPD (kPa)")
-ax.set_ylabel("s - $s_0$")
+ax.set_ylabel("s - $s_w$ (mm)")
 #ax.set_title("$g_{INT}$ $(mol/m^2/s)$")
 ax.set_title("(c)",loc="left")
 
@@ -148,9 +149,9 @@ fig.colorbar(pcm, ax=ax,label="$g_{INT}$ $(mol/m^2/s)$")
 
 
 ax = axes[1,1]
-pcm = ax.pcolormesh(vpd_range,s_sw_range,med_g,vmin=0,vmax=allmax)
+pcm = ax.pcolormesh(vpd_range,s_sw_range*zsoil_mm,med_g,vmin=0,vmax=allmax)
 ax.set_xlabel("VPD (kPa)")
-ax.set_ylabel("s - $s_0$")
+ax.set_ylabel("s - $s_w$ (mm)")
 ax.set_title("(d)",loc="left")
 
 fig.colorbar(pcm, ax=ax,label="$g_{MED}$ $(mol/m^2/s)$")
@@ -160,9 +161,9 @@ fig.colorbar(pcm, ax=ax,label="$g_{MED}$ $(mol/m^2/s)$")
 gdiff = new_opt_g-med_g
 absmax = np.max(np.abs(gdiff))
 ax = axes[2,0]
-pcm = ax.pcolormesh(vpd_range,s_sw_range,gdiff,cmap="RdBu",vmin=-absmax,vmax= absmax)
+pcm = ax.pcolormesh(vpd_range,s_sw_range*zsoil_mm,gdiff,cmap="RdBu",vmin=-absmax,vmax= absmax)
 ax.set_xlabel("VPD (kPa)")
-ax.set_ylabel("s - $s_0$")
+ax.set_ylabel("s - $s_w$ (mm)")
 #ax.set_title("$g_{INT}-g_{MED}$ $(mol/m^2/s)$")
 ax.set_title("(e)",loc="left")
 

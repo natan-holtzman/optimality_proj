@@ -119,7 +119,10 @@ df_in = df_in.loc[np.isfinite(df_in.NIGHT)]
 #bigyear = pd.read_csv("all_yearsites.csv")
 
 #bigyear = pd.read_csv("hourly_gs_data_fullyear_parMM.csv")
-bigyear = pd.read_csv("hourly_gs_data_lai75d_parMM.csv")
+#bigyear = pd.read_csv("hourly_gs_data_lai75d_parMM.csv")
+
+bigyear = pd.read_csv("hourly_gs_data_lai75_clim2_parMM.csv")
+
 #bigyear = pd.read_csv("hourly_gs_data_lai75b_parMM.csv")
 
 gppD = np.array(bigyear.gpp_dt+bigyear.gpp_nt)/2
@@ -146,6 +149,7 @@ all_results = []
 ddlist = []
 #for site_id in pd.unique(df_in.SITE_ID)[:]:#[forest_daily[x] for x in [70,76]]:
 #for site_id in goodsites:#[forest_daily[x] for x in [70,76]]:
+#for site_id in ["AU-DaS","AU-DaP","AU-How","US-Me2","US-MMS"]:
 for site_id in pd.unique(bigyear.SITE_ID):
     #%%
     #if site_id=="ZM-Mon":
@@ -200,6 +204,7 @@ for site_id in pd.unique(bigyear.SITE_ID):
     dfull["gpp_pred"] = dfull.amax_daily*(1 - np.exp(-dfull.cond2/dfull.gA_daily))
     dfull["gpp_pred_const"] = dfull.amax_daily*(1 - np.exp(-np.mean(dfull.cond2)/dfull.gA_daily))
 
+    #dfull["gpp_pred_lin"] = dfull.amax_daily*(dfull.cond2/dfull.gA_daily)
 
     #daymod = smf.ols("np.log(gpp/gpp_pred) ~ doy + np.power(doy,2)",data=dfull,missing='drop').fit()
 
@@ -209,6 +214,15 @@ for site_id in pd.unique(bigyear.SITE_ID):
 
     dfull["gppR2_exp"] = r2_skipna(dfull.gpp_pred,dfull.gpp)
     dfull["gppR2_const"] = r2_skipna(dfull.gpp_pred_const,dfull.gpp)
+    #%%
+    # afrac = 1 - np.exp(-dfull.cond2/dfull.gA_daily)
+    # frac_above_9 = np.sum(afrac > 0.9)/np.sum(np.isfinite(afrac))
+    # if frac_above_9 < 0.1:
+    #     site_message.append("Not enough hi GPP")
+    #     continue
+    # if frac_above_9 > 0.9:
+    #     site_message.append("Not enough lo GPP")
+    #     continue
     #%%
     if r2_skipna(dfull.gpp_pred,dfull.gpp) < 0:
         site_message.append("GPP model did not fit")
@@ -551,6 +565,27 @@ for site_id in pd.unique(bigyear.SITE_ID):
     all_results.append(dfull)
     
     site_message.append("Tau estimated")
+    #%%
+    # plt.figure(figsize=(14,10))
+    # plt.subplot(2,3,1)
+    # plt.plot(dfull.ET)
+    # plt.title("ET")
+    # plt.subplot(2,3,2)
+    # plt.plot(dfull.vpd)
+    # plt.title("VPD")
+    # plt.subplot(2,3,3)
+    # plt.plot(dfull.gpp)
+    # plt.title("GPP")
+    # plt.subplot(2,3,4)
+    # plt.plot(dfull.gA_daily)
+    # plt.title("gA")
+    # plt.subplot(2,3,5)
+    # plt.plot(dfull.cond)
+    # plt.title("g")
+    # plt.subplot(2,3,6)
+    # plt.plot(dfull.LAI)
+    # plt.title("LAI")
+    # plt.suptitle(site_id)
 #%%
     
 #%%
@@ -601,7 +636,7 @@ df_meta = df_meta.loc[df_meta.tau_ddreg_hi > 0]
 #%%
 #df_meta = df_meta.loc[(df_meta.tau_hi-df_meta.tau_lo)/df_meta.tau_reg < 0.75]
 #df_meta = df_meta.loc[df_meta.tau_rel_err < 0.25]
-
+df_meta = df_meta.loc[df_meta.gpp_par_err_rel < 0.05]
 #df_meta = df_meta.loc[(df_meta.tau_ddreg_hi-df_meta.tau_ddreg_lo)/ df_meta.tau_ddreg < 1].copy()
 #df_meta = df_meta.loc[df_meta.tau_ddreg_hi-df_meta.tau_ddreg_lo < 25].copy()
 df_meta = df_meta.loc[df_meta.reg_ndd >= 3].copy()
@@ -906,9 +941,10 @@ for x in site_pair:
     
     
     #plt.subplot(2,1,si)
-    plt.plot(np.array(jtab.ET),'ko-',linewidth=3,label="Eddy covariance")
-    plt.plot(epred50,'o-',color="tab:blue",linewidth=3,alpha=0.6,label=r"Model, $\tau$ = 50 days")
-    plt.plot(epred20,'o-',color="tab:orange",linewidth=3,alpha=0.6,label=r"Model, $\tau$ = 20 days")
+    xvar = np.arange(len(jtab.ET))+2
+    plt.plot(xvar, np.array(jtab.ET),'ko-',linewidth=3,label="Eddy covariance")
+    plt.plot(xvar,epred50,'o-',color="tab:blue",linewidth=3,alpha=0.6,label=r"Model, $\tau$ = 50 days")
+    plt.plot(xvar,epred20,'o-',color="tab:orange",linewidth=3,alpha=0.6,label=r"Model, $\tau$ = 20 days")
     if si == 1:
         #plt.ylabel("ET (mm/day)",fontsize=22)
         #plt.ylim(-0.1,2)
@@ -922,11 +958,11 @@ for x in site_pair:
     si += 1
 #plt.tight_layout()
 #plt.ylim(-0.1,3.9)
-plt.xticks(np.arange(0,20,3))
+plt.xticks(np.arange(2,23,3))
 plt.xlabel("Day of drydown",fontsize=22)
 plt.ylabel("ET (mm/day)",fontsize=22)
-plt.text(0,1.25,site_pair[0],fontsize=20)
-plt.text(0,2.5,site_pair[1],fontsize=20)
+plt.text(1.5,1.25,site_pair[0],fontsize=20)
+plt.text(1.5,2.5,site_pair[1],fontsize=20)
 plt.ylim(0,2.75)
 
 # sinf = (ej / np.sqrt(fj) / np.sqrt(2/tau))**2
